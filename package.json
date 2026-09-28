@@ -1,0 +1,16 @@
+{
+  "name": "agentguard",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Capability-based delegation for AI agents, enforced on-chain",
+  "workspaces": ["contracts", "packages/shared", "gateway"],
+  "scripts": {
+    "chain": "npm run node -w contracts",
+    "deploy": "npm run deploy:local -w contracts",
+    "test": "npm test -w contracts",
+    "build:shared": "npm run build -w @agentguard/shared",
+    "gateway": "npm run dev -w gateway",
+    "gateway:test": "npm test -w gateway",
+    "build": "npm run build:shared && npm run build -w gateway"
+  }
+}

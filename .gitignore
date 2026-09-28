@@ -1,0 +1,10 @@
+node_modules/
+artifacts/
+cache/
+typechain-types/
+coverage/
+.env
+*.db
+__pycache__/
+.venv/
+dist/
