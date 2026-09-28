@@ -18,7 +18,7 @@ export function DashboardPage() {
   const active = grants.filter((g) => g.status === GrantStatus.Active).length;
   const frozen = grants.filter((g) => g.status === GrantStatus.Frozen).length;
   const blocked = events.filter((e) => e.code > 0 && e.code < 100).length;
-  const spent = grants.reduce((s, g) => s + Number(BigInt(g.spent)), 0n);
+  const spent = grants.reduce((s, g) => s + BigInt(g.spent), 0n);
   const chartData = [...events]
     .reverse()
     .slice(-20)
