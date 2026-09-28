@@ -3,14 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "description": "Capability-based delegation for AI agents, enforced on-chain",
-  "workspaces": ["contracts", "packages/shared", "gateway"],
+  "workspaces": ["contracts", "packages/shared", "gateway", "web"],
   "scripts": {
     "chain": "npm run node -w contracts",
-    "deploy": "npm run deploy:local -w contracts",
+    "deploy": "npm run deploy:ganache -w contracts",
+    "deploy:hardhat": "npm run deploy:local -w contracts",
+    "seed": "npm run seed:ganache -w contracts",
+    "seed:hardhat": "npm run seed:local -w contracts",
     "test": "npm test -w contracts",
     "build:shared": "npm run build -w @agentguard/shared",
     "gateway": "npm run dev -w gateway",
     "gateway:test": "npm test -w gateway",
-    "build": "npm run build:shared && npm run build -w gateway"
+    "build": "npm run build:shared && npm run build -w gateway && npm run build -w web",
+    "web": "npm run dev -w web",
+    "agent": "cd agent && .venv\\Scripts\\python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:ui": "concurrently -k -n gateway,web,agent -c green,cyan,magenta \"npm run gateway\" \"npm run web\" \"npm run agent\"",
+    "start": "node scripts/dev-all.mjs",
+    "start:hardhat": "cross-env START_HARDHAT_NODE=1 RPC_URL=http://127.0.0.1:8545 CHAIN_ID=31337 DEPLOY_NETWORK=localhost node scripts/dev-all.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3"
   }
 }

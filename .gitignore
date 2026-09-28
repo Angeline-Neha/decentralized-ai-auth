@@ -4,7 +4,12 @@ cache/
 typechain-types/
 coverage/
 .env
+!.env.example
+!**/.env.example
+contracts/deployments/
 *.db
 __pycache__/
 .venv/
+agent/.venv/
+agent/**/__pycache__/
 dist/

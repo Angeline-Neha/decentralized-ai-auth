@@ -11,6 +11,7 @@ import { eventRoutes } from "./routes/events.js";
 import { auditRoutes } from "./routes/audit.js";
 import { streamRoutes } from "./routes/stream.js";
 import { devRoutes } from "./routes/dev.js";
+import { configRoutes } from "./routes/config.js";
 
 const app = Fastify({ logger: true });
 
@@ -23,6 +24,7 @@ await app.register(eventRoutes);
 await app.register(auditRoutes);
 await app.register(streamRoutes);
 await app.register(devRoutes);
+await app.register(configRoutes);
 
 app.get("/", async () => ({
   name: "AgentGuard Gateway",

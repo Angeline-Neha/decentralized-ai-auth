@@ -9,6 +9,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./merkle": {
+      "types": "./dist/merkle.d.ts",
+      "import": "./dist/merkle.js"
+    },
+    "./reasons": {
+      "types": "./dist/reasons.d.ts",
+      "import": "./dist/reasons.js"
     }
   },
   "scripts": {

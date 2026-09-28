@@ -7,21 +7,41 @@ it holds a keypair and signs intents, and a smart contract enforces the owner's 
 1. **Contract core**: grants, escrow, signed intents, nonces, Merkle action whitelist,
    caps, rate limit, budget, strikes / circuit breaker, revoke, audit hash-chain.
 2. **Approval queue + sub-delegation** (contract extension)
-3. **Gateway** (this drop): relayer, SQLite indexer, proof service, mock providers, SSE, audit verify
-4. Python agent simulator
-5. Frontend security console
-6. Red-team demo, polish
+3. **Gateway**: relayer, SQLite indexer, proof service, mock providers, SSE, audit verify
+4. **Python agent** (`agent/`): EIP-712 signer, naive planner, FastAPI `/run` + `/thoughts`, `verify_audit.py`
+5. **Frontend** (`web/`): security console — wallet, dashboard, create grant, audit, approvals, red team
+6. **Polish**: Merkle + delegation views, dev tools, demo docs (`docs/DEMO.md`)
 
 ## Quick start
+
+**Ganache (default):** start Ganache, then:
+
+```bash
+copy .env.example .env
+npm start
+```
+
+See **[docs/GANACHE.md](docs/GANACHE.md)** for RPC URL, chain ID, and copying account keys into `gateway/.env` / `agent/.env`.
+
+**Hardhat node instead:** `npm run start:hardhat`
+
+**First-time setup:**
+
 ```bash
 npm install
-npm test                      # contract tests
-npm run chain                 # terminal 1: local blockchain
-npm run deploy                # terminal 2: deploy AgentGuard
-npm run build:shared          # compile shared types/helpers
-cp gateway/.env.example gateway/.env
-npm run gateway               # terminal 3: gateway on :3001
+copy .env.example .env
+copy gateway\.env.example gateway\.env
+cd agent && python -m venv .venv && .venv\Scripts\pip install -r requirements.txt && copy .env.example .env && cd ..
 ```
+
+Fill **RELAYER_PRIVATE_KEY** (Ganache account #2) and **AGENT_PRIVATE_KEY** (account #1) from the Ganache UI.
+
+**Manual (multi-terminal)** if you prefer: `npm run chain` → `npm run deploy` → `npm run seed` → `npm run dev:ui`
+
+Full viva walkthrough: [`docs/DEMO.md`](docs/DEMO.md) · Q&A: [`docs/VIVA.md`](docs/VIVA.md)
+
+### MetaMask (for Create grant / Approvals)
+Add network **Hardhat Local**: RPC `http://127.0.0.1:8545`, chain ID **31337**. Import account **#0** private key (Hardhat default) as owner.
 
 After creating a grant on-chain, upload its action manifest:
 ```bash

@@ -6,7 +6,10 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "node": "hardhat node",
-    "deploy:local": "hardhat run scripts/deploy.ts --network localhost"
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:ganache": "hardhat run scripts/deploy.ts --network ganache",
+    "seed:local": "hardhat run scripts/seed-grant.ts --network localhost",
+    "seed:ganache": "hardhat run scripts/seed-grant.ts --network ganache"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.2"
