@@ -19,13 +19,12 @@ INTENT_TYPES = {
 
 
 def action_id(name: str) -> str:
-    return Web3.keccak(text=name).hex()
+    return Web3.to_hex(Web3.keccak(text=name))
 
 
 def params_hash(params: dict[str, Any] | None) -> str:
     payload = json.dumps(params or {}, sort_keys=True, separators=(",", ":"))
-    return Web3.keccak(text=payload).hex()
-
+    return Web3.to_hex(Web3.keccak(text=payload))
 
 class IntentSigner:
     def __init__(self, private_key: str, chain_id: int, verifying_contract: str) -> None:
