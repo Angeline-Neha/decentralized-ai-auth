@@ -4,7 +4,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContractFactory, JsonRpcProvider, NonceManager, Wallet, parseEther, type Signer } from "ethers";
 import { config } from "../config.js";
-import { tamperAuditRow } from "../audit/verify.js";
+import { restoreAuditFromChain, tamperAuditRow } from "../audit/verify.js";
 import { getCalendar, getInbox } from "../providers/mock.js";
 import { getProvider, updateDeploymentAddress } from "../contract/client.js";
 import { saveManifest } from "../proof/service.js";
@@ -34,7 +34,7 @@ export async function devRoutes(app: FastifyInstance) {
   });
 
   /** Corrupt one indexed audit row to demo hash-chain verification failure. */
-  app.post<{ Body: { index: number; field?: "amount" | "code"; value?: string } }>(
+  app.post<{ Body: { index: number; field?: "amount" | "code" | "action_id" | "action_name" | "head"; value?: string } }>(
     "/dev/tamper-audit",
     async (req) => {
       const index = req.body?.index;
@@ -43,6 +43,12 @@ export async function devRoutes(app: FastifyInstance) {
       return { tampered: index, field: req.body.field ?? "amount" };
     },
   );
+
+  /** Restore SQLite audit entries from on-chain event logs */
+  app.post("/dev/restore-audit", async () => {
+    await restoreAuditFromChain();
+    return { status: "ok", message: "Audit logs restored from on-chain ground truth" };
+  });
 
   app.get("/dev/inbox", async () => ({ inbox: getInbox() }));
   app.get("/dev/calendar", async () => ({ calendar: getCalendar() }));

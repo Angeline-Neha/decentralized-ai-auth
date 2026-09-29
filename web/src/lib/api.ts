@@ -79,10 +79,21 @@ export function devAdvanceTime(seconds: number) {
   });
 }
 
-export function devTamperAudit(index: number) {
-  return gw<{ tampered: number }>("/dev/tamper-audit", {
+export function devTamperAudit(
+  index: number,
+  field: "amount" | "code" | "action_id" | "action_name" | "head" = "amount",
+  value = "999999999999999999",
+) {
+  return gw<{ tampered: number; field: string }>("/dev/tamper-audit", {
     method: "POST",
-    body: JSON.stringify({ index }),
+    body: JSON.stringify({ index, field, value }),
+  });
+}
+
+export function devRestoreAudit() {
+  return gw<{ status: string; message: string }>("/dev/restore-audit", {
+    method: "POST",
+    body: "{}",
   });
 }
 
@@ -150,10 +161,25 @@ export interface PendingRow {
   expires_at: number;
 }
 
+export interface VerifyRow {
+  index: number;
+  grantId: number;
+  actionId?: string;
+  actionName?: string;
+  outcome?: string;
+  amount?: string;
+  paramsHash?: string;
+  code?: number;
+  head: string;
+  blockNumber: number;
+  txHash?: string;
+}
+
 export interface VerifyResult {
   valid: boolean;
   brokenAt: number | null;
   onChainHead: string;
   computedHead: string;
   entriesChecked: number;
+  rows?: VerifyRow[];
 }
