@@ -15,6 +15,14 @@ function isEventLog(log: Log | EventLog): log is EventLog {
 export async function syncGrantsFromChain(grantId?: number) {
   const guard = getGuardReadOnly();
   const nextId = Number(await guard.nextGrantId());
+  
+  if (!grantId) {
+    // If running full sync, remove any grants that don't exist on-chain anymore
+    getDb().prepare("DELETE FROM grants WHERE id >= ?").run(nextId);
+    getDb().prepare("DELETE FROM grant_manifests WHERE grant_id >= ?").run(nextId);
+    getDb().prepare("DELETE FROM pending_intents WHERE grant_id >= ?").run(nextId);
+  }
+
   const start = grantId ?? 1;
   for (let id = start; id < nextId; id++) {
     const g = await guard.getGrant(id);
@@ -63,20 +71,16 @@ export function upsertGrantRow(row: Omit<GrantRow, "updated_at">) {
     .run(row);
 }
 
-async function indexHistoricalEvents() {
+export async function indexHistoricalEvents() {
   const guard = getGuardReadOnly();
-  const { blockNumber: fromBlock, logIndex: fromLog } = getCursor(CURSOR);
   const filter = guard.filters.AuditAppended();
-  const logs = await guard.queryFilter(filter, fromBlock || 0);
+  const logs = await guard.queryFilter(filter, 0);
 
-  let lastBlock = fromBlock;
-  let lastLog = fromLog;
+  // Prune any stale audit rows if contract was redeployed with fewer events
+  getDb().prepare("DELETE FROM audit_events WHERE index_num >= ?").run(logs.length);
 
   for (const log of logs) {
     if (!isEventLog(log)) continue;
-    if (log.blockNumber < fromBlock) continue;
-    if (log.blockNumber === fromBlock && log.index <= fromLog) continue;
-
     const a = log.args;
     upsertAuditRow({
       indexNum: Number(a.index),
@@ -90,28 +94,6 @@ async function indexHistoricalEvents() {
       txHash: log.transactionHash,
       logIndex: log.index,
     });
-
-    sse.publish({
-      type: "audit",
-      data: {
-        index: Number(a.index),
-        grantId: Number(a.grantId),
-        actionId: a.actionId,
-        actionName: resolveActionName(Number(a.grantId), a.actionId),
-        amount: a.amount.toString(),
-        code: Number(a.code),
-        outcome: auditOutcomeLabel(Number(a.code)),
-        head: a.head,
-        txHash: log.transactionHash,
-      },
-    });
-
-    lastBlock = log.blockNumber;
-    lastLog = log.index;
-  }
-
-  if (lastBlock !== fromBlock || lastLog !== fromLog) {
-    setCursor(CURSOR, lastBlock, lastLog);
   }
 
   await syncGrantsFromChain();

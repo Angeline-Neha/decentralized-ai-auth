@@ -1,5 +1,5 @@
 export const HARDHAT_CHAIN_ID = 31337;
-export const DEMO_AGENT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
+export const DEMO_AGENT = "0x11a32cCeA9ABFa3e67f3ab5842CbD97dd74fdB88";
 export const DEFAULT_ACTIONS = ["read_calendar", "send_email", "pay_invoice"] as const;
 
 export const GATEWAY = import.meta.env.VITE_GATEWAY_URL ?? "/api/gateway";

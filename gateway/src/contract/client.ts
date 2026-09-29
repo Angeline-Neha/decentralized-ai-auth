@@ -29,6 +29,11 @@ export function getGuardReadOnly(): Contract {
   return new Contract(config.deployment.address, abi, getProvider());
 }
 
+export function updateDeploymentAddress(newAddress: string) {
+  config.deployment.address = newAddress;
+  guard = null;
+}
+
 export async function getDomain() {
   const chainId = BigInt(config.deployment.chainId);
   return {

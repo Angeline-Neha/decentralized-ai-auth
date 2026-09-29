@@ -1,4 +1,4 @@
-import { BrowserProvider, Contract, JsonRpcSigner, Eip1193Provider } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, JsonRpcSigner, Wallet, type Signer } from "ethers";
 import {
   createContext,
   useCallback,
@@ -10,75 +10,145 @@ import {
 } from "react";
 import { fetchConfig, type ChainConfig } from "./api";
 
+const DEV_OWNER_PRIVATE_KEY = "0x79ccfcb428668eb125c1ca954de251a9d4f985bd3e9abfd88bea9343f4451de1";
+
 type WalletCtx = {
   config: ChainConfig | null;
   address: string | null;
   balance: string | null;
   chainOk: boolean;
   connecting: boolean;
+  isDevMode: boolean;
   connect: () => Promise<void>;
+  connectDev: () => Promise<void>;
+  disconnect: () => void;
   getContract: () => Contract | null;
-  getSigner: () => JsonRpcSigner | null;
-  provider: BrowserProvider | null;
+  getSigner: () => Signer | null;
+  provider: BrowserProvider | JsonRpcProvider | null;
 };
 
 const Ctx = createContext<WalletCtx | null>(null);
 
-declare global {
-  interface Window {
-    ethereum?: Eip1193Provider;
+function getEthereumProvider(): any {
+  if (typeof window === "undefined") return null;
+  const anyWin = window as any;
+  if (!anyWin.ethereum) return null;
+  if (Array.isArray(anyWin.ethereum.providers)) {
+    const mm = anyWin.ethereum.providers.find((p: any) => p.isMetaMask);
+    if (mm) return mm;
+    return anyWin.ethereum.providers[0];
   }
+  return anyWin.ethereum;
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<ChainConfig | null>(null);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
-  const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
+  const [provider, setProvider] = useState<BrowserProvider | JsonRpcProvider | null>(null);
+  const [signer, setSigner] = useState<Signer | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [chainOk, setChainOk] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [isDevMode, setIsDevMode] = useState(false);
 
   useEffect(() => {
     fetchConfig().then(setConfig).catch(console.error);
   }, []);
 
-  const refresh = useCallback(
-    async (p: BrowserProvider, addr: string) => {
-      const bal = await p.getBalance(addr);
-      setBalance((Number(bal) / 1e18).toFixed(4));
-      const net = await p.getNetwork();
-      const expected = config?.chainId;
-      setChainOk(expected === undefined || Number(net.chainId) === Number(expected));
+  const refreshBalance = useCallback(
+    async (p: BrowserProvider | JsonRpcProvider, addr: string) => {
+      try {
+        const bal = await p.getBalance(addr);
+        setBalance((Number(bal) / 1e18).toFixed(4));
+        const net = await p.getNetwork();
+        const expected = config?.chainId;
+        setChainOk(expected === undefined || Number(net.chainId) === Number(expected));
+      } catch (e) {
+        console.error("Failed to refresh balance/network:", e);
+      }
     },
     [config?.chainId],
   );
 
-  useEffect(() => {
-    if (provider && address && config) {
-      void refresh(provider, address);
+  const connectDev = useCallback(async () => {
+    if (!config) return;
+    setConnecting(true);
+    try {
+      const rpc = config.rpcUrl || "http://127.0.0.1:7545";
+      const p = new JsonRpcProvider(rpc);
+      const w = new Wallet(DEV_OWNER_PRIVATE_KEY, p);
+      const addr = await w.getAddress();
+      setProvider(p);
+      setSigner(w);
+      setAddress(addr);
+      setIsDevMode(true);
+      setChainOk(true);
+      await refreshBalance(p, addr);
+    } catch (e: any) {
+      alert(`Could not connect local owner: ${e.message}`);
+    } finally {
+      setConnecting(false);
     }
-  }, [config?.chainId, provider, address, refresh, config]);
+  }, [config, refreshBalance]);
 
   const connect = useCallback(async () => {
-    if (!window.ethereum) {
-      alert("Install MetaMask and import a Hardhat account.");
+    const eth = getEthereumProvider();
+    if (!eth) {
+      const useLocal = confirm(
+        "MetaMask extension was not detected in this browser window.\n\nWould you like to connect using the 1-Click Local Owner Account #0 (Dev Mode) instead?",
+      );
+      if (useLocal) {
+        await connectDev();
+      }
       return;
     }
     setConnecting(true);
     try {
-      const p = new BrowserProvider(window.ethereum);
+      const p = new BrowserProvider(eth);
       await p.send("eth_requestAccounts", []);
+      
+      // Attempt to auto-switch to target chain if configured
+      if (config?.chainId) {
+        const chainIdHex = "0x" + Number(config.chainId).toString(16);
+        try {
+          await p.send("wallet_switchEthereumChain", [{ chainId: chainIdHex }]);
+        } catch (switchErr: any) {
+          if (switchErr.code === 4902 || switchErr?.data?.originalError?.code === 4902) {
+            await p.send("wallet_addEthereumChain", [
+              {
+                chainId: chainIdHex,
+                chainName: "Ganache Local",
+                nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+                rpcUrls: [config.rpcUrl || "http://127.0.0.1:7545"],
+              },
+            ]);
+          }
+        }
+      }
+
       const s = await p.getSigner();
       const addr = await s.getAddress();
       setProvider(p);
       setSigner(s);
       setAddress(addr);
-      await refresh(p, addr);
+      setIsDevMode(false);
+      await refreshBalance(p, addr);
+    } catch (e: any) {
+      console.error(e);
+      alert(`MetaMask connection error: ${e.message ?? e}`);
     } finally {
       setConnecting(false);
     }
-  }, [refresh]);
+  }, [config, refreshBalance, connectDev]);
+
+  const disconnect = useCallback(() => {
+    setProvider(null);
+    setSigner(null);
+    setAddress(null);
+    setBalance(null);
+    setChainOk(false);
+    setIsDevMode(false);
+  }, []);
 
   const getContract = useCallback(() => {
     if (!config || !signer) return null;
@@ -92,12 +162,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       balance,
       chainOk,
       connecting,
+      isDevMode,
       connect,
+      connectDev,
+      disconnect,
       getContract,
       getSigner: () => signer,
       provider,
     }),
-    [config, address, balance, chainOk, connecting, connect, getContract, signer, provider],
+    [config, address, balance, chainOk, connecting, isDevMode, connect, connectDev, disconnect, getContract, signer, provider],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

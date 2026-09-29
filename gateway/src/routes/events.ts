@@ -1,8 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { getDb } from "../db/index.js";
+import { indexHistoricalEvents } from "../indexer/index.js";
 
 export async function eventRoutes(app: FastifyInstance) {
   app.get<{ Querystring: { grantId?: string; limit?: string; offset?: string } }>("/events", async (req) => {
+    await indexHistoricalEvents();
     const limit = Math.min(Number(req.query.limit ?? 50), 200);
     const offset = Number(req.query.offset ?? 0);
     const grantId = req.query.grantId ? Number(req.query.grantId) : null;

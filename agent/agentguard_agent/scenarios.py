@@ -99,7 +99,7 @@ def _rate_limit_burst(tools: AgentTools) -> dict[str, Any]:
 def _replay_signature(tools: AgentTools, gw: GatewayClient) -> dict[str, Any]:
     grant_id = tools._grant_id
     nonce = gw.nonce(grant_id)
-    deadline = int(time.time()) + 3600
+    deadline = 2000000000
     params = {"view": "replay-test"}
     thought_bus.emit("Signing intent for read_calendar (will replay same signature)")
     _msg, sig = tools._signer.sign_intent(

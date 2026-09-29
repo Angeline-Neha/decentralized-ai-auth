@@ -9,8 +9,8 @@ import { GrantStatus } from "@agentguard/shared/reasons";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
 export function DashboardPage() {
-  const grantsQ = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 8000 });
-  const eventsQ = useQuery({ queryKey: ["events"], queryFn: () => fetchEvents(100), refetchInterval: 8000 });
+  const grantsQ = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 3000 });
+  const eventsQ = useQuery({ queryKey: ["events"], queryFn: () => fetchEvents(100), refetchInterval: 3000 });
   const live = useEventStream(15);
 
   const grants = grantsQ.data?.grants ?? [];
@@ -47,12 +47,12 @@ export function DashboardPage() {
           <h3 className="mb-2 text-sm font-medium text-console-muted">Recent outcomes</h3>
           <div className="h-48">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
+              <BarChart data={chartData} barCategoryGap="20%">
                 <XAxis dataKey="name" tick={{ fill: "#8b9cb3", fontSize: 10 }} />
                 <YAxis hide domain={[0, 1]} />
                 <Tooltip contentStyle={{ background: "#1a2332", border: "1px solid #2d3a4f" }} />
-                <Bar dataKey="ok" stackId="a" fill="#22c55e" name="Allowed" />
-                <Bar dataKey="deny" stackId="a" fill="#ef4444" name="Denied" />
+                <Bar dataKey="ok" stackId="a" fill="#22c55e" name="Allowed" maxBarSize={32} />
+                <Bar dataKey="deny" stackId="a" fill="#ef4444" name="Denied" maxBarSize={32} />
               </BarChart>
             </ResponsiveContainer>
           </div>

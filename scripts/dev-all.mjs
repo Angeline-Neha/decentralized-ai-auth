@@ -154,6 +154,15 @@ async function main() {
   log("Seeding demo grant #1…");
   runSync("npm", ["run", `seed:${deployNetwork === "localhost" ? "local" : "ganache"}`, "-w", "contracts"]);
 
+  // Clean stale SQLite database so fresh contract deployments never show stale events or grants
+  const dbFile = path.join(root, "gateway", "data", "gateway.db");
+  if (fs.existsSync(dbFile)) {
+    try {
+      fs.unlinkSync(dbFile);
+      log("Reset stale gateway.db for fresh deployment");
+    } catch {}
+  }
+
   log("Starting gateway on :3001…");
   spawnTagged("gateway", "npm", ["run", "dev", "-w", "gateway"]);
   await waitHttp("http://127.0.0.1:3001/");

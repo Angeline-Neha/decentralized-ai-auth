@@ -22,11 +22,23 @@ export function DevToolsPage() {
     onSuccess: () => void verify.refetch(),
   });
 
+  const chainId = health.data?.chainId ?? "1337";
+  const demoSteps = [
+    "npm run chain (or start Ganache on port 7545, chain 1337)",
+    "npm run deploy && npm run seed",
+    "copy gateway/.env.example gateway/.env && npm run gateway",
+    "agent venv + uvicorn (or npm run agent)",
+    `npm run web → connect MetaMask Account #0 on chain ${chainId}`,
+    "Red team (Grant ID 1) → Normal day / Prompt injection, then Audit → Verify chain",
+    "Dev tools → Tamper audit row #0 → Re-verify audit chain fails",
+    "python agent/scripts/verify_audit.py (independent verifier)",
+  ];
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Dev & demo tools</h2>
-        <p className="text-sm text-console-muted">Hardhat time travel and audit tampering for viva demos</p>
+        <p className="text-sm text-console-muted">Blockchain time travel and audit tampering for viva demos</p>
       </div>
 
       <div className="panel grid gap-2 p-4 text-sm sm:grid-cols-2">
@@ -53,14 +65,18 @@ export function DevToolsPage() {
 
       {verify.data && (
         <p className={`text-sm ${verify.data.valid ? "text-emerald-300" : "text-red-300"}`}>
-          Verify: {verify.data.valid ? "VALID" : `BROKEN at ${verify.data.brokenAt}`}
+          {verify.data.valid
+            ? `Verify: VALID (${verify.data.entriesChecked} entries verified)`
+            : verify.data.entriesChecked === 0
+            ? "Verify: No audit entries recorded in DB yet. Run a scenario in Red Team (Grant ID 1) first!"
+            : `Verify: BROKEN at row index ${verify.data.brokenAt ?? 0}`}
         </p>
       )}
 
       <section className="panel p-4">
         <h3 className="font-medium">Demo script (viva)</h3>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-console-muted">
-          {DEMO_STEPS.map((s) => (
+          {demoSteps.map((s) => (
             <li key={s}>{s}</li>
           ))}
         </ol>

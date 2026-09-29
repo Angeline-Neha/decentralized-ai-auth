@@ -1,9 +1,11 @@
 import { verifyAuditChainWithStoredHeads } from "@agentguard/shared";
 import { getDb } from "../db/index.js";
 import { getGuardReadOnly } from "../contract/client.js";
+import { indexHistoricalEvents } from "../indexer/index.js";
 import type { AuditRow } from "../db/index.js";
 
 export async function verifyAuditFromDb(grantId?: number) {
+  await indexHistoricalEvents();
   const db = getDb();
   const rows = (
     grantId

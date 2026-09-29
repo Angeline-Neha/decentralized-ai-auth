@@ -52,7 +52,9 @@ export async function proofsForAction(grantId: number, actionName: string): Prom
       throw new Error(`No manifest uploaded for grant ${id}. POST /grants/${id}/manifest first.`);
     }
     if (!manifest.actions.includes(actionName)) {
-      throw new Error(`Action "${actionName}" not in manifest for grant ${id}`);
+      // Action not in whitelist: send empty proof so smart contract rejects on-chain with ActionNotAllowed
+      proofs.push([]);
+      continue;
     }
     const tree = buildActionTree(manifest.actions);
     proofs.push(proofFor(tree, actionName));

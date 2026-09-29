@@ -76,7 +76,7 @@ export async function relayIntent(req: IntentRequest): Promise<IntentResult> {
 
   let receipt: ContractTransactionReceipt;
   try {
-    const tx = await guard.execute(intent, req.signature, proofs);
+    const tx = await guard.execute(intent, req.signature, proofs, { gasLimit: 500_000 });
     receipt = await tx.wait();
   } catch (err) {
     const reason = decodeRevert(err);

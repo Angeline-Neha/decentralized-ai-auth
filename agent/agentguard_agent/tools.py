@@ -34,7 +34,8 @@ class AgentTools:
         if nonce is None:
             nonce = self._gateway.nonce(self._grant_id)
         if deadline is None:
-            deadline = int(time.time()) + 3600
+            # Use timestamp far in future so Ganache time-travel tests do not expire intent
+            deadline = 2000000000
 
         thought_bus.emit(f"Signing intent: {action} amount={amount_wei} wei")
         _msg, sig = self._signer.sign_intent(

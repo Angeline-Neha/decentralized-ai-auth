@@ -29,7 +29,7 @@ export function CreateGrantPage() {
   async function submit() {
     const guard = getContract();
     if (!guard || !address) {
-      setErr("Connect wallet (Hardhat account #0 as owner).");
+      setErr("Please connect your wallet (Account #0 as owner) using the 'Connect wallet' button in the top right.");
       return;
     }
     setBusy(true);
@@ -66,7 +66,7 @@ export function CreateGrantPage() {
         <p className="text-sm text-console-muted">On-chain policy + Merkle action whitelist</p>
       </div>
 
-      {!chainOk && address && <p className="text-sm text-amber-300">Use Hardhat network in MetaMask before signing.</p>}
+      {!chainOk && address && <p className="text-sm text-amber-300">Please switch MetaMask network to RPC http://127.0.0.1:7545 (Chain ID 1337) before signing.</p>}
 
       <div className="flex gap-2 text-xs">
         {["Agent", "Actions", "Limits", "Sign"].map((l, i) => (

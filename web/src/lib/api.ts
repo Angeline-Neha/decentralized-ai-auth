@@ -88,6 +88,13 @@ export function devHealth() {
   return gw<{ rpcUrl: string; contract: string; chainId: number; devMode: boolean }>("/dev/health");
 }
 
+export function devResetDemo() {
+  return gw<{ status: string; message: string }>("/dev/reset", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export interface GrantRow {
   id: number;
   owner: string;
