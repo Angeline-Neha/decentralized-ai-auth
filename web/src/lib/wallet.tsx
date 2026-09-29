@@ -1,4 +1,4 @@
-import { BrowserProvider, Contract, JsonRpcProvider, JsonRpcSigner, Wallet, type Signer } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, Wallet, type InterfaceAbi, type Signer } from "ethers";
 import {
   createContext,
   useCallback,
@@ -8,8 +8,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { fetchConfig, type ChainConfig } from "./api";
+import { GATEWAY } from "./constants";
 
+const WALLET_KEY = "agentguard.wallet"; // remembers which wallet mode to auto-restore after a refresh
 const DEV_OWNER_PRIVATE_KEY = "0x79ccfcb428668eb125c1ca954de251a9d4f985bd3e9abfd88bea9343f4451de1";
 
 type WalletCtx = {
@@ -21,6 +24,7 @@ type WalletCtx = {
   isDevMode: boolean;
   connect: () => Promise<void>;
   connectDev: () => Promise<void>;
+  refreshConfig: () => Promise<void>;
   disconnect: () => void;
   getContract: () => Contract | null;
   getSigner: () => Signer | null;
@@ -51,9 +55,64 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false);
   const [isDevMode, setIsDevMode] = useState(false);
 
-  useEffect(() => {
-    fetchConfig().then(setConfig).catch(console.error);
+  const qc = useQueryClient();
+
+  // The contract address changes on every "Reset Demo" / redeploy. Keep config fresh instead of reading it once.
+  const refreshConfig = useCallback(async () => {
+    try {
+      const next = await fetchConfig();
+      setConfig((prev) =>
+        prev &&
+        prev.address === next.address &&
+        prev.chainId === next.chainId &&
+        prev.rpcUrl === next.rpcUrl &&
+        prev.contractLive === next.contractLive &&
+        prev.fingerprint === next.fingerprint
+          ? prev
+          : next,
+      );
+    } catch (e) {
+      console.error("config refresh failed:", e);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshConfig();
+    const t = setInterval(() => void refreshConfig(), 4000);
+    const onFocus = () => void refreshConfig();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [refreshConfig]);
+
+  // One app-wide SSE connection: any chain event invalidates cached queries so trees/graphs/lists update
+  // immediately; a reset also reloads config and drops every cached query.
+  useEffect(() => {
+    const es = new EventSource(`${GATEWAY}/stream`);
+    const invalidate = () => void qc.invalidateQueries();
+    const onReset = () => {
+      void refreshConfig().then(() => qc.resetQueries());
+      window.dispatchEvent(new Event("agentguard:reset"));
+    };
+    es.addEventListener("audit", invalidate);
+    es.addEventListener("grant", (ev) => {
+      try {
+        if (JSON.parse((ev as MessageEvent).data as string)?.event === "Reset") return onReset();
+      } catch {
+        /* ignore */
+      }
+      invalidate();
+    });
+    es.addEventListener("pending", invalidate);
+    es.addEventListener("reset", onReset);
+    es.onopen = () => {
+      void refreshConfig();
+      invalidate();
+    };
+    return () => es.close();
+  }, [qc, refreshConfig]);
 
   const refreshBalance = useCallback(
     async (p: BrowserProvider | JsonRpcProvider, addr: string) => {
@@ -70,6 +129,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [config?.chainId],
   );
 
+  useEffect(() => {
+    if (provider && address) void refreshBalance(provider, address);
+  }, [config?.chainId, config?.address, provider, address, refreshBalance]);
+
   const connectDev = useCallback(async () => {
     if (!config) return;
     setConnecting(true);
@@ -83,6 +146,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setAddress(addr);
       setIsDevMode(true);
       setChainOk(true);
+      try {
+        localStorage.setItem(WALLET_KEY, "dev");
+      } catch {
+        /* ignore */
+      }
       await refreshBalance(p, addr);
     } catch (e: any) {
       alert(`Could not connect local owner: ${e.message}`);
@@ -132,6 +200,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setSigner(s);
       setAddress(addr);
       setIsDevMode(false);
+      try {
+        localStorage.setItem(WALLET_KEY, "metamask");
+      } catch {
+        /* ignore */
+      }
       await refreshBalance(p, addr);
     } catch (e: any) {
       console.error(e);
@@ -142,6 +215,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [config, refreshBalance, connectDev]);
 
   const disconnect = useCallback(() => {
+    try {
+      localStorage.removeItem(WALLET_KEY);
+    } catch {
+      /* ignore */
+    }
     setProvider(null);
     setSigner(null);
     setAddress(null);
@@ -150,9 +228,64 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setIsDevMode(false);
   }, []);
 
+  // Restore the wallet after a page refresh (no prompt: eth_accounts only returns already-authorised accounts).
+  useEffect(() => {
+    if (!config || address) return;
+    let mode: string | null = null;
+    try {
+      mode = localStorage.getItem(WALLET_KEY);
+    } catch {
+      /* ignore */
+    }
+    if (mode === "dev") void connectDev();
+    else if (mode === "metamask") {
+      const eth = getEthereumProvider();
+      if (!eth) return;
+      (async () => {
+        try {
+          const accts: string[] = await eth.request({ method: "eth_accounts" });
+          if (!accts.length) return;
+          const p = new BrowserProvider(eth);
+          const s = await p.getSigner();
+          const addr = await s.getAddress();
+          setProvider(p);
+          setSigner(s);
+          setAddress(addr);
+          setIsDevMode(false);
+          await refreshBalance(p, addr);
+        } catch (e) {
+          console.error("wallet restore failed:", e);
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config?.address]);
+
+  // React to MetaMask account / network switches instead of showing stale balance and chain warnings.
+  useEffect(() => {
+    const eth = getEthereumProvider();
+    if (!eth?.on || isDevMode) return;
+    const onAccounts = async (accts: string[]) => {
+      if (!accts.length) return disconnect();
+      if (provider instanceof BrowserProvider) {
+        const s = await provider.getSigner();
+        setSigner(s);
+        setAddress(await s.getAddress());
+        await refreshBalance(provider, accts[0]);
+      }
+    };
+    const onChain = () => window.location.reload();
+    eth.on("accountsChanged", onAccounts);
+    eth.on("chainChanged", onChain);
+    return () => {
+      eth.removeListener?.("accountsChanged", onAccounts);
+      eth.removeListener?.("chainChanged", onChain);
+    };
+  }, [provider, isDevMode, disconnect, refreshBalance]);
+
   const getContract = useCallback(() => {
     if (!config || !signer) return null;
-    return new Contract(config.address, config.abi, signer);
+    return new Contract(config.address, config.abi as InterfaceAbi, signer);
   }, [config, signer]);
 
   const value = useMemo(
@@ -165,12 +298,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       isDevMode,
       connect,
       connectDev,
+      refreshConfig,
       disconnect,
       getContract,
       getSigner: () => signer,
       provider,
     }),
-    [config, address, balance, chainOk, connecting, isDevMode, connect, connectDev, disconnect, getContract, signer, provider],
+    [config, address, balance, chainOk, connecting, isDevMode, connect, connectDev, refreshConfig, disconnect, getContract, signer, provider],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -16,7 +16,11 @@ async function main() {
   const outFile = path.join(outDir, `${network.name}.json`);
   fs.writeFileSync(
     outFile,
-    JSON.stringify({ address, chainId: Number(chainId), deployer: deployer.address, abi: artifact.abi }, null, 2),
+    JSON.stringify(
+      { address, chainId: Number(chainId), deployer: deployer.address, abi: artifact.abi, bytecode: artifact.bytecode },
+      null,
+      2,
+    ),
   );
 
   console.log(`AgentGuard deployed to ${address} (chainId ${chainId})`);

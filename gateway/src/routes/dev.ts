@@ -2,14 +2,13 @@ import type { FastifyInstance } from "fastify";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ContractFactory, JsonRpcProvider, Wallet, parseEther } from "ethers";
+import { ContractFactory, JsonRpcProvider, NonceManager, Wallet, parseEther, type Signer } from "ethers";
 import { config } from "../config.js";
 import { tamperAuditRow } from "../audit/verify.js";
 import { getCalendar, getInbox } from "../providers/mock.js";
-import { getDb } from "../db/index.js";
-import { getGuardReadOnly, getProvider, updateDeploymentAddress } from "../contract/client.js";
+import { getProvider, updateDeploymentAddress } from "../contract/client.js";
 import { saveManifest } from "../proof/service.js";
-import { syncGrantsFromChain } from "../indexer/index.js";
+import { adoptFreshDeployment, isContractLive, startIndexer, stopIndexer, syncNow } from "../indexer/index.js";
 import { buildActionTree } from "@agentguard/shared/merkle";
 import { sse } from "../sse/broadcaster.js";
 
@@ -53,98 +52,118 @@ export async function devRoutes(app: FastifyInstance) {
     contract: config.deployment.address,
     chainId: config.deployment.chainId,
     devMode: config.devMode,
+    contractLive: isContractLive(),
   }));
 
-  /** Reset demo state: deploys a fresh contract on-chain and seeds Grant #1 cleanly */
-  app.post("/dev/reset", async () => {
+  /**
+   * Reset demo state: deploy a brand-new AgentGuard, create Grant #1, wipe the local index, and tell every
+   * connected UI to reload. Fails loudly (HTTP 500) instead of pretending it worked.
+   */
+  let resetting: Promise<unknown> | null = null;
+  app.post("/dev/reset", async (_req, reply) => {
+    if (resetting) return reply.code(409).send({ error: "Reset already in progress" });
+    resetting = doReset();
     try {
-      const provider = getProvider();
-      const owner = new Wallet(OWNER_PRIVATE_KEY, provider);
-
-      const candidates = [
-        path.resolve(__dirname, "../../contracts/artifacts/contracts/AgentGuard.sol/AgentGuard.json"),
-        path.resolve(__dirname, "../../../contracts/artifacts/contracts/AgentGuard.sol/AgentGuard.json"),
-        path.resolve(process.cwd(), "contracts/artifacts/contracts/AgentGuard.sol/AgentGuard.json"),
-        path.resolve(process.cwd(), "../contracts/artifacts/contracts/AgentGuard.sol/AgentGuard.json"),
-      ];
-      const artifactPath = candidates.find((p) => fs.existsSync(p));
-      let artifact: { abi: any; bytecode: string } | null = null;
-      if (artifactPath && fs.existsSync(artifactPath)) {
-        artifact = JSON.parse(fs.readFileSync(artifactPath, "utf8"));
-      }
-
-      if (artifact && artifact.bytecode) {
-        const factory = new ContractFactory(artifact.abi, artifact.bytecode, owner);
-        const guardContract = await factory.deploy();
-        await guardContract.waitForDeployment();
-        const newAddress = await guardContract.getAddress();
-
-        const actions = ["read_calendar", "send_email", "pay_invoice"];
-        const tree = buildActionTree(actions);
-        const tx = await (guardContract as any).createGrant(
-          {
-            agent: AGENT_ADDRESS,
-            actionsRoot: tree.root,
-            perCallCap: parseEther("0.1"),
-            totalBudget: parseEther("0.5"),
-            maxCallsPerWindow: 5,
-            windowSeconds: 3600,
-            expiry: 2000000000,
-            approvalThreshold: parseEther("0.05"),
-            maxStrikes: 3,
-          },
-          { value: parseEther("1") },
-        );
-        await tx.wait();
-
-        // Update JSON deployment files
-        const depFiles = [
-          path.resolve(__dirname, "../../contracts/deployments/ganache.json"),
-          path.resolve(__dirname, "../../../contracts/deployments/ganache.json"),
-          path.resolve(process.cwd(), "contracts/deployments/ganache.json"),
-          path.resolve(process.cwd(), "../contracts/deployments/ganache.json"),
-          path.resolve(__dirname, "../../contracts/deployments/localhost.json"),
-          path.resolve(__dirname, "../../../contracts/deployments/localhost.json"),
-          path.resolve(process.cwd(), "contracts/deployments/localhost.json"),
-          path.resolve(process.cwd(), "../contracts/deployments/localhost.json"),
-        ];
-        for (const f of depFiles) {
-          if (fs.existsSync(f)) {
-            try {
-              const data = JSON.parse(fs.readFileSync(f, "utf8"));
-              data.address = newAddress;
-              fs.writeFileSync(f, JSON.stringify(data, null, 2));
-            } catch {}
-          }
-        }
-
-        updateDeploymentAddress(newAddress);
-
-        const db = getDb();
-        db.prepare("DELETE FROM audit_events").run();
-        db.prepare("DELETE FROM provider_runs").run();
-        db.prepare("DELETE FROM pending_intents").run();
-        db.prepare("DELETE FROM grants").run();
-        db.prepare("DELETE FROM grant_manifests").run();
-
-        saveManifest(1, actions, tree.root);
-        await syncGrantsFromChain();
-        sse.publish({ type: "grant", data: { grantId: 1, event: "Reset" } });
-
-        return { status: "ok", address: newAddress, message: "Fresh contract deployed and Grant #1 seeded" };
-      }
+      return await resetting;
     } catch (e: any) {
-      console.error("Deploy/reset error:", e);
+      app.log.error({ err: e }, "Reset failed");
+      return reply.code(500).send({ status: "error", error: e?.shortMessage ?? e?.message ?? String(e) });
+    } finally {
+      resetting = null;
+      startIndexer().catch((e) => app.log.error({ err: e }, "indexer restart failed"));
     }
-
-    // Fallback: clear DB
-    const db = getDb();
-    db.prepare("DELETE FROM audit_events").run();
-    db.prepare("DELETE FROM provider_runs").run();
-    db.prepare("DELETE FROM pending_intents").run();
-    db.prepare("DELETE FROM grants WHERE id > 1").run();
-    db.prepare("DELETE FROM grant_manifests WHERE grant_id > 1").run();
-    await syncGrantsFromChain();
-    return { status: "ok", message: "Demo state reset successfully" };
   });
+}
+
+function findArtifact(): { abi: any; bytecode: string } | null {
+  const rels = ["contracts/artifacts/contracts/AgentGuard.sol/AgentGuard.json"];
+  const bases = [path.resolve(__dirname, "../../.."), path.resolve(__dirname, "../../../.."), process.cwd(), path.resolve(process.cwd(), "..")];
+  for (const b of bases) {
+    for (const r of rels) {
+      const f = path.join(b, r);
+      if (fs.existsSync(f)) {
+        const j = JSON.parse(fs.readFileSync(f, "utf8"));
+        if (j.bytecode && j.bytecode !== "0x") return { abi: j.abi, bytecode: j.bytecode };
+      }
+    }
+  }
+  const dep = config.deployment;
+  if (dep.bytecode) return { abi: dep.abi as any, bytecode: dep.bytecode };
+  return null;
+}
+
+function writeJsonAtomic(file: string, data: unknown) {
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+  fs.renameSync(tmp, file);
+}
+
+async function doReset() {
+  const artifact = findArtifact();
+  if (!artifact) {
+    throw new Error("AgentGuard artifact/bytecode not found. Run `npm run deploy` (or `npm run compile -w contracts`) once, then retry.");
+  }
+  stopIndexer();
+  const provider = getProvider();
+
+  // Prefer the node's unlocked accounts (Ganache/Hardhat): the node assigns nonces itself, so there is no
+  // client-side nonce cache to go stale. Falls back to the well-known dev key if the node exposes none.
+  const accounts: string[] = await provider.send("eth_accounts", []);
+  let owner: Signer;
+  let agentAddress: string;
+  if (accounts.length >= 2) {
+    owner = await provider.getSigner(accounts[0]);
+    agentAddress = accounts[1];
+  } else {
+    owner = new NonceManager(new Wallet(process.env.OWNER_PRIVATE_KEY ?? OWNER_PRIVATE_KEY, provider));
+    agentAddress = process.env.AGENT_ADDRESS ?? AGENT_ADDRESS;
+  }
+
+  const factory = new ContractFactory(artifact.abi, artifact.bytecode, owner);
+  const guardContract = await factory.deploy();
+  await guardContract.waitForDeployment();
+  const newAddress = await guardContract.getAddress();
+
+  const actions = ["read_calendar", "send_email", "pay_invoice"];
+  const tree = buildActionTree(actions);
+  const latest = await provider.getBlock("latest");
+  const now = Math.max(Math.floor(Date.now() / 1000), latest?.timestamp ?? 0);
+  const tx = await (guardContract as any).createGrant(
+    {
+      agent: agentAddress,
+      actionsRoot: tree.root,
+      perCallCap: parseEther("0.1"),
+      totalBudget: parseEther("0.5"),
+      maxCallsPerWindow: 5,
+      windowSeconds: 3600,
+      expiry: now + 30 * 86400,
+      approvalThreshold: parseEther("0.05"),
+      maxStrikes: 3,
+    },
+    { value: parseEther("1") },
+  );
+  await tx.wait();
+
+  // Persist the new address in the deployment file(s) the gateway / scripts / verify_audit read.
+  const dir = path.dirname(config.deploymentPath);
+  const files = new Set([config.deploymentPath, path.join(dir, "ganache.json"), path.join(dir, "localhost.json")]);
+  for (const f of files) {
+    if (!fs.existsSync(f)) continue;
+    try {
+      const data = JSON.parse(fs.readFileSync(f, "utf8"));
+      data.address = newAddress;
+      writeJsonAtomic(f, data);
+    } catch (e) {
+      console.error(`Could not update ${f}:`, e);
+    }
+  }
+  updateDeploymentAddress(newAddress);
+
+  await adoptFreshDeployment(); // wipes every table for the old contract
+  saveManifest(1, actions, tree.root);
+  await syncNow(); // grants + (empty) audit for the new contract
+
+  sse.publish({ type: "reset", data: { address: newAddress } });
+  sse.publish({ type: "grant", data: { grantId: 1, event: "Reset", address: newAddress } });
+  return { status: "ok", address: newAddress, message: "Fresh contract deployed; everything wiped; Grant #1 seeded" };
 }

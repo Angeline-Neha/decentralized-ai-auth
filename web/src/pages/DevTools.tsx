@@ -1,19 +1,8 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { devAdvanceTime, devHealth, devTamperAudit, verifyAudit } from "../lib/api";
 
-const DEMO_STEPS = [
-  "npm run chain",
-  "npm run deploy && npm run seed",
-  "copy gateway/.env.example gateway/.env && npm run gateway",
-  "agent venv + uvicorn (or npm run agent)",
-  "npm run web → connect MetaMask #0 on chain 31337",
-  "Red team → prompt_injection, then Audit → Verify chain",
-  "Dev tools → tamper row → Verify chain fails",
-  "python agent/scripts/verify_audit.py (independent verifier)",
-];
-
 export function DevToolsPage() {
-  const health = useQuery({ queryKey: ["dev-health"], queryFn: devHealth });
+  const health = useQuery({ queryKey: ["dev-health"], queryFn: devHealth, refetchInterval: 5000 });
   const verify = useQuery({ queryKey: ["audit-verify"], queryFn: () => verifyAudit(), enabled: false });
 
   const advance = useMutation({ mutationFn: (s: number) => devAdvanceTime(s) });

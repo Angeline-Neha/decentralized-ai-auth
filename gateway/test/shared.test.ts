@@ -60,3 +60,12 @@ describe("shared audit chain", () => {
     assert.equal(result.brokenAt, 0);
   });
 });
+
+describe("audit labels", () => {
+  it("code 0 is Executed, not None (regression)", async () => {
+    const { auditOutcomeLabel } = await import("@agentguard/shared");
+    assert.equal(auditOutcomeLabel(0), "Executed");
+    assert.equal(auditOutcomeLabel(100), "Pending");
+    assert.equal(auditOutcomeLabel(4), "ActionNotAllowed");
+  });
+});

@@ -36,13 +36,15 @@ export const AuditCode = {
   Delegated: 103,
 } as const;
 
+// NOTE: spread ReasonLabel FIRST. Reason.None (0) collides with AuditCode.Executed (0);
+// spreading it last used to overwrite "Executed" with "None" for every executed action.
 export const AuditCodeLabel: Record<number, string> = {
+  ...ReasonLabel,
   [AuditCode.Executed]: "Executed",
   [AuditCode.Pending]: "Pending",
   [AuditCode.Approved]: "Approved",
   [AuditCode.Rejected]: "Rejected",
   [AuditCode.Delegated]: "Delegated",
-  ...ReasonLabel,
 };
 
 export function auditOutcomeLabel(code: number): string {

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { getDb } from "../db/index.js";
+import { currentFingerprint, isContractLive } from "../indexer/index.js";
 
 export async function configRoutes(app: FastifyInstance) {
   app.get("/config", async () => ({
@@ -8,6 +9,8 @@ export async function configRoutes(app: FastifyInstance) {
     chainId: config.deployment.chainId,
     rpcUrl: config.rpcUrl,
     abi: config.deployment.abi,
+    fingerprint: currentFingerprint(),
+    contractLive: isContractLive(),
   }));
 
   app.get("/pending", async () => {

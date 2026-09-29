@@ -4,6 +4,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import net from "node:net";
 import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,6 +61,39 @@ function spawnTagged(tag, cmd, args, cwd = root) {
   p.stdout?.on("data", prefix);
   p.stderr?.on("data", (d) => process.stderr.write(d.toString().replace(/^/gm, `[${tag}] `)));
   return p;
+}
+
+function portInUse(port) {
+  return new Promise((resolve) => {
+    const sock = net.connect({ port, host: "127.0.0.1" });
+    sock.once("connect", () => {
+      sock.destroy();
+      resolve(true);
+    });
+    sock.once("error", () => resolve(false));
+    sock.setTimeout(1000, () => {
+      sock.destroy();
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * A gateway/web/agent left over from a previous run (e.g. terminal closed, Ctrl+C missed its children) keeps
+ * serving OLD state while the new gateway fails to bind — and waitHttp() happily succeeds against the old one.
+ * That is a classic cause of "stale grants / empty audit log / reset does nothing". Refuse to start instead.
+ */
+async function assertPortsFree() {
+  const busy = [];
+  for (const [name, port] of [["gateway", 3001], ["web", 5173], ["agent", 8000]]) {
+    if (await portInUse(port)) busy.push(`${name} :${port}`);
+  }
+  if (busy.length) {
+    const hint = isWin
+      ? "Windows: netstat -ano | findstr :3001   then   taskkill /PID <pid> /F /T"
+      : "lsof -ti :3001 -ti :5173 -ti :8000 | xargs kill";
+    throw new Error(`Old AgentGuard processes are still running (${busy.join(", ")}). Stop them first.\n  ${hint}`);
+  }
 }
 
 async function waitRpc(url, timeoutMs = 120_000) {
@@ -129,14 +163,30 @@ function shutdown() {
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+process.on("SIGBREAK", shutdown);
+process.on("exit", () => {
+  for (const p of children) {
+    try {
+      if (isWin) spawnSync("taskkill", ["/pid", String(p.pid), "/f", "/t"], { stdio: "ignore", shell: true });
+      else p.kill("SIGTERM");
+    } catch {
+      /* ignore */
+    }
+  }
+});
 
 async function main() {
+  await assertPortsFree();
   log("Building shared package…");
   runSync("npm", ["run", "build:shared"]);
 
   if (!fs.existsSync(path.join(root, "gateway", ".env"))) {
+    const example = path.join(root, "gateway", ".env.example");
+    if (!fs.existsSync(example)) {
+      throw new Error("gateway/.env is missing (and gateway/.env.example not found). Create gateway/.env with RPC_URL, RELAYER_PRIVATE_KEY (Ganache account #2) and DEPLOYMENT_PATH.");
+    }
     log("Copy gateway/.env.example → gateway/.env — then set RELAYER_PRIVATE_KEY from Ganache account #2");
-    fs.copyFileSync(path.join(root, "gateway", ".env.example"), path.join(root, "gateway", ".env"));
+    fs.copyFileSync(example, path.join(root, "gateway", ".env"));
   }
 
   if (startHardhat) {
@@ -155,13 +205,16 @@ async function main() {
   runSync("npm", ["run", `seed:${deployNetwork === "localhost" ? "local" : "ganache"}`, "-w", "contracts"]);
 
   // Clean stale SQLite database so fresh contract deployments never show stale events or grants
+  // Remove the -wal/-shm sidecars too: a leftover WAL next to a deleted DB is what used to resurrect old rows.
   const dbFile = path.join(root, "gateway", "data", "gateway.db");
-  if (fs.existsSync(dbFile)) {
+  for (const f of [dbFile, `${dbFile}-wal`, `${dbFile}-shm`, `${dbFile}-journal`]) {
     try {
-      fs.unlinkSync(dbFile);
-      log("Reset stale gateway.db for fresh deployment");
-    } catch {}
+      fs.rmSync(f, { force: true });
+    } catch (e) {
+      throw new Error(`Cannot delete ${f} (${e.message}). Is an old gateway still running?`);
+    }
   }
+  log("Cleared gateway database for the fresh deployment");
 
   log("Starting gateway on :3001…");
   spawnTagged("gateway", "npm", ["run", "dev", "-w", "gateway"]);

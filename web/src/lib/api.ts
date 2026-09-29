@@ -14,6 +14,8 @@ export type ChainConfig = {
   chainId: number;
   rpcUrl: string;
   abi: unknown[];
+  fingerprint?: string | null;
+  contractLive?: boolean;
 };
 
 export function fetchConfig() {
@@ -85,14 +87,24 @@ export function devTamperAudit(index: number) {
 }
 
 export function devHealth() {
-  return gw<{ rpcUrl: string; contract: string; chainId: number; devMode: boolean }>("/dev/health");
+  return gw<{ rpcUrl: string; contract: string; chainId: number; devMode: boolean; contractLive?: boolean }>("/dev/health");
 }
 
-export function devResetDemo() {
-  return gw<{ status: string; message: string }>("/dev/reset", {
+export async function devResetDemo() {
+  const r = await fetch(`${GATEWAY}/dev/reset`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: "{}",
   });
+  const text = await r.text();
+  let j: any = null;
+  try {
+    j = JSON.parse(text);
+  } catch {
+    /* not json */
+  }
+  if (!r.ok) throw new Error(j?.error ?? j?.message ?? text);
+  return j as { status: string; address?: string; message: string };
 }
 
 export interface GrantRow {

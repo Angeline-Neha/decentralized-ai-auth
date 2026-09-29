@@ -9,7 +9,9 @@ let relayer: Wallet | null = null;
 let guard: Contract | null = null;
 
 export function getProvider(): JsonRpcProvider {
-  if (!provider) provider = new JsonRpcProvider(config.rpcUrl);
+  // cacheTimeout: -1 disables ethers' request cache. Without it, eth_getTransactionCount is served stale
+  // right after a mined tx on Ganache ("tx doesn't have the correct nonce"), which broke /dev/reset.
+  if (!provider) provider = new JsonRpcProvider(config.rpcUrl, undefined, { cacheTimeout: -1 });
   return provider;
 }
 
@@ -32,6 +34,8 @@ export function getGuardReadOnly(): Contract {
 export function updateDeploymentAddress(newAddress: string) {
   config.deployment.address = newAddress;
   guard = null;
+  // Nonce/state caches inside the provider must not survive a redeploy.
+  relayer = null;
 }
 
 export async function getDomain() {

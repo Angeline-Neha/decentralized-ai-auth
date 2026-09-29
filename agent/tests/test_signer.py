@@ -7,7 +7,8 @@ from agentguard_agent.signer import INTENT_TYPES, action_id, params_hash, Intent
 
 
 def test_action_id_matches_web3():
-    assert action_id("read_calendar") == Web3.keccak(text="read_calendar").hex()
+    # web3 v7 .hex() has no 0x prefix; compare canonical 0x-hex instead
+    assert action_id("read_calendar").lower() == Web3.to_hex(Web3.keccak(text="read_calendar")).lower()
 
 
 def test_sign_intent_recovers_agent():

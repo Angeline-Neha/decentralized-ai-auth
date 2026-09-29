@@ -1,21 +1,25 @@
-import { Contract, EventLog, Log } from "ethers";
 import { auditOutcomeLabel } from "@agentguard/shared";
-import { getGuardReadOnly } from "../contract/client.js";
-import { getCursor, getDb, setCursor, type GrantRow } from "../db/index.js";
+import { getGuardReadOnly, getProvider } from "../contract/client.js";
+import { config } from "../config.js";
+import { getCursor, getDb, getMeta, setCursor, setMeta, wipeAll, type GrantRow } from "../db/index.js";
 import { upsertAuditRow } from "../providers/mock.js";
 import { resolveActionName } from "../proof/service.js";
 import { sse } from "../sse/broadcaster.js";
 
 const CURSOR = "agentguard";
 
-function isEventLog(log: Log | EventLog): log is EventLog {
-  return (log as EventLog).args !== undefined;
-}
-
 export async function syncGrantsFromChain(grantId?: number) {
   const guard = getGuardReadOnly();
-  const nextId = Number(await guard.nextGrantId());
-  
+  let nextId: number;
+  try {
+    nextId = Number(await guard.nextGrantId());
+  } catch {
+    // No contract at this address (Ganache restarted / stale deployment file): nothing on-chain, nothing indexed.
+    getDb().prepare("DELETE FROM grants").run();
+    getDb().prepare("DELETE FROM pending_intents").run();
+    return;
+  }
+
   if (!grantId) {
     // If running full sync, remove any grants that don't exist on-chain anymore
     getDb().prepare("DELETE FROM grants WHERE id >= ?").run(nextId);
@@ -71,121 +75,217 @@ export function upsertGrantRow(row: Omit<GrantRow, "updated_at">) {
     .run(row);
 }
 
-export async function indexHistoricalEvents() {
-  const guard = getGuardReadOnly();
-  const filter = guard.filters.AuditAppended();
-  const logs = await guard.queryFilter(filter, 0);
-
-  // Prune any stale audit rows if contract was redeployed with fewer events
-  getDb().prepare("DELETE FROM audit_events WHERE index_num >= ?").run(logs.length);
-
-  for (const log of logs) {
-    if (!isEventLog(log)) continue;
-    const a = log.args;
-    upsertAuditRow({
-      indexNum: Number(a.index),
-      grantId: Number(a.grantId),
-      actionId: a.actionId,
-      amount: a.amount.toString(),
-      paramsHash: a.paramsHash,
-      code: Number(a.code),
-      head: a.head,
-      blockNumber: log.blockNumber,
-      txHash: log.transactionHash,
-      logIndex: log.index,
-    });
-  }
-
-  await syncGrantsFromChain();
+/**
+ * Identity of the chain + contract the DB was built from. If Ganache is restarted (new genesis block),
+ * the contract is redeployed, or the gateway is pointed elsewhere, the fingerprint changes and every
+ * indexed table is wiped and rebuilt from the chain. This is what stops stale grants/audit rows
+ * surviving a restart.
+ */
+async function computeFingerprint(): Promise<{ fp: string; hasCode: boolean }> {
+  const provider = getProvider();
+  const [net, genesis, code] = await Promise.all([
+    provider.getNetwork(),
+    provider.getBlock(0),
+    provider.getCode(config.deployment.address),
+  ]);
+  return {
+    fp: `${net.chainId}:${config.deployment.address.toLowerCase()}:${genesis?.hash ?? "?"}`,
+    hasCode: code !== "0x",
+  };
 }
 
-export async function startIndexer() {
-  const guard = getGuardReadOnly();
-  await indexHistoricalEvents();
+let lastFingerprint: string | null = null;
+let contractLive = true;
+let lastWarn = 0;
 
-  guard.on("AuditAppended", (...args: unknown[]) => {
-    const event = args[args.length - 1] as EventLog;
-    const a = event.args;
-    upsertAuditRow({
-      indexNum: Number(a.index),
-      grantId: Number(a.grantId),
-      actionId: a.actionId,
-      amount: a.amount.toString(),
-      paramsHash: a.paramsHash,
-      code: Number(a.code),
-      head: a.head,
-      blockNumber: event.blockNumber,
-      txHash: event.transactionHash,
-      logIndex: event.index,
-    });
-    setCursor(CURSOR, event.blockNumber, event.index);
-    sse.publish({
-      type: "audit",
-      data: {
-        index: Number(a.index),
-        grantId: Number(a.grantId),
-        actionId: a.actionId,
-        actionName: resolveActionName(Number(a.grantId), a.actionId),
-        amount: a.amount.toString(),
-        code: Number(a.code),
-        outcome: auditOutcomeLabel(Number(a.code)),
-        head: a.head,
-        txHash: event.transactionHash,
-      },
-    });
-    void syncGrantsFromChain(Number(a.grantId));
-  });
+export function isContractLive() {
+  return contractLive;
+}
+let syncing: Promise<void> | null = null;
+let syncAgain = false;
+let firstSyncDone = false;
+let watcher: NodeJS.Timeout | null = null;
 
-  guard.on("GrantCreated", (...args: unknown[]) => {
-    const event = args[args.length - 1] as EventLog;
-    const grantId = Number(event.args.grantId);
-    void syncGrantsFromChain(grantId);
-    sse.publish({ type: "grant", data: { grantId, event: "GrantCreated" } });
-  });
+export function currentFingerprint() {
+  return lastFingerprint;
+}
 
-  guard.on("PendingCreated", (...args: unknown[]) => {
-    const event = args[args.length - 1] as EventLog;
-    const a = event.args;
-    getDb()
-      .prepare(
-        `INSERT OR REPLACE INTO pending_intents
-         (pending_id, grant_id, nonce, action_id, payee, amount, params_hash, expires_at, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-      )
-      .run(
-        Number(a.pendingId),
-        Number(a.grantId),
-        Number(a.nonce),
-        a.actionId,
-        a.payee,
-        a.amount.toString(),
-        "0x0000000000000000000000000000000000000000000000000000000000000000",
-        Number(a.expiresAt),
+/** Wipe local index and re-read the whole chain history (used on reset / chain change). */
+export async function rebuildIndex(reason: string) {
+  console.log(`[indexer] rebuilding index: ${reason}`);
+  wipeAll();
+  firstSyncDone = false;
+  await syncNow();
+}
+
+async function runSync() {
+  const { fp, hasCode } = await computeFingerprint();
+  const stored = getMeta("fingerprint");
+  const changed = stored !== fp;
+  if (changed) {
+    if (stored) console.log(`[indexer] chain/contract changed (${stored} -> ${fp}); wiping stale index`);
+    wipeAll();
+    setMeta("fingerprint", fp);
+    firstSyncDone = false;
+  }
+  const chainChanged = lastFingerprint !== null && lastFingerprint !== fp;
+  lastFingerprint = fp;
+
+  contractLive = hasCode;
+  if (!hasCode) {
+    if (Date.now() - lastWarn > 30_000) {
+      lastWarn = Date.now();
+      console.error(
+        `[indexer] NO CONTRACT CODE at ${config.deployment.address}. Ganache was restarted or the deployment file is stale — click "Reset Demo" (or re-run npm start).`,
       );
-    sse.publish({ type: "pending", data: { pendingId: Number(a.pendingId), grantId: Number(a.grantId) } });
-  });
+    }
+    if (changed) sse.publish({ type: "grant", data: { event: "Reset", reason: "no-contract" } });
+    return;
+  }
 
-  guard.on("PendingApproved", (...args: unknown[]) => {
-    const pendingId = Number((args[args.length - 1] as EventLog).args.pendingId);
-    getDb().prepare("UPDATE pending_intents SET status = 2 WHERE pending_id = ?").run(pendingId);
-    sse.publish({ type: "pending", data: { pendingId, status: "Approved" } });
-  });
+  const provider = getProvider();
+  const guard = getGuardReadOnly();
+  const latest = await provider.getBlockNumber();
+  const cur = getCursor(CURSOR);
+  const hasCursor = getMeta("cursor_set") === fp;
+  let from = hasCursor ? cur.blockNumber + 1 : 0;
+  if (from > latest + 1) from = 0; // chain went backwards: re-read everything
+  const publish = firstSyncDone; // don't replay history into the live feed
 
-  guard.on("PendingRejected", (...args: unknown[]) => {
-    const pendingId = Number((args[args.length - 1] as EventLog).args.pendingId);
-    getDb().prepare("UPDATE pending_intents SET status = 3 WHERE pending_id = ?").run(pendingId);
-    sse.publish({ type: "pending", data: { pendingId, status: "Rejected" } });
-  });
+  let touched = false;
+  if (from <= latest) {
+    const logs = await provider.getLogs({ address: config.deployment.address, fromBlock: from, toBlock: latest });
+    for (const log of logs) {
+      let parsed;
+      try {
+        parsed = guard.interface.parseLog(log);
+      } catch {
+        continue;
+      }
+      if (!parsed) continue;
+      touched = true;
+      const a = parsed.args;
+      switch (parsed.name) {
+        case "AuditAppended": {
+          const row = {
+            indexNum: Number(a.index),
+            grantId: Number(a.grantId),
+            actionId: a.actionId as string,
+            amount: (a.amount as bigint).toString(),
+            paramsHash: a.paramsHash as string,
+            code: Number(a.code),
+            head: a.head as string,
+            blockNumber: log.blockNumber,
+            txHash: log.transactionHash,
+            logIndex: log.index,
+          };
+          upsertAuditRow(row);
+          if (publish) {
+            sse.publish({
+              type: "audit",
+              data: {
+                index: row.indexNum,
+                grantId: row.grantId,
+                actionId: row.actionId,
+                actionName: resolveActionName(row.grantId, row.actionId),
+                amount: row.amount,
+                code: row.code,
+                outcome: auditOutcomeLabel(row.code),
+                head: row.head,
+                txHash: row.txHash,
+              },
+            });
+          }
+          break;
+        }
+        case "GrantCreated":
+        case "Frozen":
+        case "Unfrozen":
+        case "Revoked":
+        case "ToppedUp":
+          if (publish) sse.publish({ type: "grant", data: { grantId: Number(a.grantId), event: parsed.name } });
+          break;
+        case "Delegated":
+          if (publish) sse.publish({ type: "grant", data: { grantId: Number(a.childId), event: "Delegated" } });
+          break;
+        case "PendingCreated": {
+          const pid = Number(a.pendingId);
+          const pd = await guard.getPending(pid);
+          getDb()
+            .prepare(
+              `INSERT OR REPLACE INTO pending_intents
+               (pending_id, grant_id, nonce, action_id, payee, amount, params_hash, expires_at, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+            )
+            .run(pid, Number(a.grantId), Number(a.nonce), a.actionId, a.payee, (a.amount as bigint).toString(), pd.paramsHash, Number(a.expiresAt));
+          if (publish) sse.publish({ type: "pending", data: { pendingId: pid, grantId: Number(a.grantId) } });
+          break;
+        }
+        case "PendingApproved":
+        case "PendingRejected": {
+          const pid = Number(a.pendingId);
+          const status = parsed.name === "PendingApproved" ? 2 : 3;
+          getDb().prepare("UPDATE pending_intents SET status = ? WHERE pending_id = ?").run(status, pid);
+          if (publish) sse.publish({ type: "pending", data: { pendingId: pid, status: parsed.name.replace("Pending", "") } });
+          break;
+        }
+        default:
+          break;
+      }
+    }
+    setCursor(CURSOR, latest, 0);
+    setMeta("cursor_set", fp);
+  }
 
-  guard.on("Frozen", (...args: unknown[]) => {
-    const grantId = Number((args[args.length - 1] as EventLog).args.grantId);
-    void syncGrantsFromChain(grantId);
-    sse.publish({ type: "grant", data: { grantId, event: "Frozen" } });
-  });
+  if (touched || changed || !firstSyncDone) await syncGrantsFromChain();
+  firstSyncDone = true;
+  if (chainChanged) sse.publish({ type: "grant", data: { event: "Reset", reason: "chain-changed" } });
+}
 
-  guard.on("Revoked", (...args: unknown[]) => {
-    const grantId = Number((args[args.length - 1] as EventLog).args.grantId);
-    void syncGrantsFromChain(grantId);
-    sse.publish({ type: "grant", data: { grantId, event: "Revoked" } });
-  });
+/** Incremental, single-flight sync. Concurrent callers share one run; a call made mid-run triggers one more. */
+export function syncNow(): Promise<void> {
+  if (syncing) {
+    syncAgain = true;
+    return syncing;
+  }
+  syncing = (async () => {
+    try {
+      do {
+        syncAgain = false;
+        await runSync();
+      } while (syncAgain);
+    } catch (e) {
+      console.error("[indexer] sync failed:", e);
+    } finally {
+      syncing = null;
+    }
+  })();
+  return syncing;
+}
+
+/** Back-compat name used by routes. Now incremental (does not overwrite existing rows). */
+export const indexHistoricalEvents = syncNow;
+
+export async function startIndexer() {
+  await syncNow();
+  if (watcher) clearInterval(watcher);
+  // Polling is more reliable than ethers' filter subscriptions on Ganache, survives redeploys,
+  // and also notices Ganache being restarted underneath us.
+  watcher = setInterval(() => void syncNow(), 1500);
+  watcher.unref?.();
+}
+
+export function stopIndexer() {
+  if (watcher) clearInterval(watcher);
+  watcher = null;
+}
+
+/** Called by /dev/reset right after a fresh contract is live: forget everything indexed for the old one. */
+export async function adoptFreshDeployment() {
+  if (syncing) await syncing;
+  const { fp } = await computeFingerprint();
+  wipeAll();
+  setMeta("fingerprint", fp);
+  lastFingerprint = fp;
+  firstSyncDone = false;
 }

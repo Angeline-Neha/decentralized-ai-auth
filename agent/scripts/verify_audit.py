@@ -32,11 +32,13 @@ def compute_head(prev: bytes, grant_id: int, action_id: bytes, amount: int, para
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Verify AgentGuard audit hash chain from chain events")
-    parser.add_argument("--rpc", default="http://127.0.0.1:8545")
-    parser.add_argument(
-        "--deployment",
-        default=str(Path(__file__).resolve().parents[2] / "contracts" / "deployments" / "localhost.json"),
-    )
+    deploy_dir = Path(__file__).resolve().parents[2] / "contracts" / "deployments"
+    # Ganache setup writes ganache.json (RPC :7545); the Hardhat node setup writes localhost.json (:8545).
+    ganache = deploy_dir / "ganache.json"
+    default_dep = ganache if ganache.is_file() else deploy_dir / "localhost.json"
+    default_rpc = "http://127.0.0.1:7545" if default_dep == ganache else "http://127.0.0.1:8545"
+    parser.add_argument("--rpc", default=default_rpc)
+    parser.add_argument("--deployment", default=str(default_dep))
     args = parser.parse_args()
 
     dep_path = Path(args.deployment)
@@ -56,7 +58,10 @@ def main() -> int:
     on_chain_head = contract.functions.auditHead().call()
     on_chain_count = contract.functions.auditCount().call()
 
-    logs = contract.events.AuditAppended.get_logs(fromBlock=0)
+    try:  # web3 v7+
+        logs = contract.events.AuditAppended.get_logs(from_block=0)
+    except TypeError:  # web3 v6
+        logs = contract.events.AuditAppended.get_logs(fromBlock=0)
     logs.sort(key=lambda e: (e["blockNumber"], e["logIndex"]))
 
     head = b"\x00" * 32

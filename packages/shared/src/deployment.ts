@@ -6,6 +6,8 @@ export interface DeploymentInfo {
   chainId: number;
   deployer: string;
   abi: readonly unknown[];
+  /** Optional creation bytecode (written by deploy.ts) so /dev/reset can redeploy without Hardhat artifacts. */
+  bytecode?: string;
 }
 
 /** Load contracts/deployments/<network>.json written by Hardhat deploy script. */

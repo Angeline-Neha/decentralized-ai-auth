@@ -6,7 +6,7 @@ import { fetchGrants } from "../lib/api";
 import { ethFromWei, shortAddr, statusLabel } from "../lib/format";
 
 export function DelegationTreePage() {
-  const q = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 8000 });
+  const q = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 3000 });
   const grants = q.data?.grants ?? [];
 
   const { nodes, edges } = useMemo(() => {

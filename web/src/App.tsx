@@ -12,7 +12,9 @@ import { MerkleVisualizerPage } from "./pages/MerkleVisualizer";
 import { DelegationTreePage } from "./pages/DelegationTree";
 import { DevToolsPage } from "./pages/DevTools";
 
-const qc = new QueryClient();
+const qc = new QueryClient({
+  defaultOptions: { queries: { staleTime: 0, refetchOnMount: "always", refetchOnWindowFocus: true, refetchOnReconnect: true, retry: 1 } },
+});
 
 export default function App() {
   return (

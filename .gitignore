@@ -11,12 +11,15 @@ coverage/
 # secrets
 .env
 .env.*
-.env.example
-**/.env.example
+!.env.example
+!**/.env.example
 
 # generated
 contracts/deployments/
 *.db
+*.db-wal
+*.db-shm
+gateway/data/
 *.db-journal
 *.sqlite
 

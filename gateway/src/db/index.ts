@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { config, ensureDataDir } from "../config.js";
 
@@ -83,6 +84,11 @@ CREATE TABLE IF NOT EXISTS indexer_cursors (
   log_index INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_audit_grant ON audit_events(grant_id);
 CREATE INDEX IF NOT EXISTS idx_audit_index ON audit_events(index_num);
 `;
@@ -90,6 +96,17 @@ CREATE INDEX IF NOT EXISTS idx_audit_index ON audit_events(index_num);
 export function getDb(): DatabaseSync {
   if (!db) {
     ensureDataDir();
+    // An orphaned -wal/-shm left behind without its main file (e.g. gateway.db was deleted while the
+    // gateway was still running, or the WAL was committed to git) must never be replayed into a new DB.
+    if (!fs.existsSync(config.dbPath)) {
+      for (const ext of ["-wal", "-shm"]) {
+        try {
+          fs.rmSync(config.dbPath + ext, { force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
     db = new DatabaseSync(config.dbPath);
     db.exec("PRAGMA journal_mode = WAL");
     db.exec(SCHEMA);
@@ -163,4 +180,23 @@ export function setCursor(name: string, blockNumber: number, logIndex: number) {
        ON CONFLICT(name) DO UPDATE SET block_number = excluded.block_number, log_index = excluded.log_index`,
     )
     .run(name, blockNumber, logIndex);
+}
+
+/** Wipe every indexed table (chain is the source of truth; everything here is rebuildable). */
+export function wipeAll() {
+  const d = getDb();
+  for (const t of ["audit_events", "provider_runs", "pending_intents", "grants", "grant_manifests", "indexer_cursors"]) {
+    d.exec(`DELETE FROM ${t}`);
+  }
+}
+
+export function getMeta(key: string): string | null {
+  const row = getDb().prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+export function setMeta(key: string, value: string) {
+  getDb()
+    .prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .run(key, value);
 }

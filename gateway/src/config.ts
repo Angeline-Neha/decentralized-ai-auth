@@ -12,6 +12,7 @@ function env(key: string, fallback?: string): string {
 }
 
 const gatewayRoot = path.join(__dirname, "..");
+const deploymentPath = path.resolve(gatewayRoot, process.env.DEPLOYMENT_PATH ?? "../contracts/deployments/localhost.json");
 
 export const config = {
   port: Number(process.env.PORT ?? 3001),
@@ -23,9 +24,8 @@ export const config = {
     emailApiKey: process.env.MOCK_EMAIL_API_KEY ?? "demo-email-key",
     calendarApiKey: process.env.MOCK_CALENDAR_API_KEY ?? "demo-calendar-key",
   },
-  deployment: loadDeployment(
-    path.resolve(gatewayRoot, process.env.DEPLOYMENT_PATH ?? "../contracts/deployments/localhost.json"),
-  ),
+  deploymentPath,
+  deployment: loadDeployment(deploymentPath),
 };
 
 export function ensureDataDir() {

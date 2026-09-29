@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
 import { config } from "./config.js";
 import { closeDb } from "./db/index.js";
-import { startIndexer } from "./indexer/index.js";
+import { startIndexer, stopIndexer } from "./indexer/index.js";
 import { grantRoutes } from "./routes/grants.js";
 import { intentRoutes } from "./routes/intents.js";
 import { delegationRoutes } from "./routes/delegations.js";
@@ -48,6 +48,7 @@ app.get("/", async () => ({
 await startIndexer();
 
 const shutdown = async () => {
+  stopIndexer();
   await app.close();
   closeDb();
   process.exit(0);

@@ -10,6 +10,7 @@ export function MerkleVisualizerPage() {
   const grantQ = useQuery({
     queryKey: ["grant-merkle", grantId],
     queryFn: () => fetchGrant(grantId),
+    refetchInterval: 5000,
   });
 
   const proofQ = useQuery({
@@ -18,7 +19,7 @@ export function MerkleVisualizerPage() {
     enabled: !!grantQ.data?.manifest?.actions.includes(action),
   });
 
-  const actions = grantQ.data?.manifest?.actions ?? [];
+  const actions = useMemo(() => grantQ.data?.manifest?.actions ?? [], [grantQ.data]);
   const tree = useMemo(() => (actions.length ? buildActionTree(actions) : null), [actions]);
   const proofSet = useMemo(() => new Set(proofQ.data?.proofs[0]?.proof ?? []), [proofQ.data]);
 

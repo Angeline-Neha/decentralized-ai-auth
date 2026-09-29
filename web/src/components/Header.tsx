@@ -6,7 +6,7 @@ import { devResetDemo } from "../lib/api";
 import { shortAddr } from "../lib/format";
 
 export function Header() {
-  const { address, balance, chainOk, connect, connectDev, disconnect, connecting, config, isDevMode } = useWallet();
+  const { address, balance, chainOk, connect, connectDev, disconnect, connecting, config, isDevMode, refreshConfig } = useWallet();
   const qc = useQueryClient();
   const [resetting, setResetting] = useState(false);
 
@@ -15,9 +15,12 @@ export function Header() {
     setResetting(true);
     try {
       await devResetDemo();
-      await qc.invalidateQueries();
+      // New contract address => reload config first, then drop every cached query so nothing stale is shown.
+      await refreshConfig();
+      await qc.resetQueries();
+      window.dispatchEvent(new Event("agentguard:reset"));
     } catch (e: any) {
-      alert(`Reset error: ${e.message}`);
+      alert(`Reset failed — nothing was wiped:\n${e.message}`);
     } finally {
       setResetting(false);
     }
@@ -45,6 +48,12 @@ export function Header() {
             {resetting ? "Resetting…" : "Reset Demo"}
           </button>
 
+          {config && config.contractLive === false && (
+            <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-300">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              No contract on chain — click Reset Demo
+            </span>
+          )}
           {!chainOk && address && (
             <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-3 py-1 text-xs text-red-300">
               <AlertTriangle className="h-3.5 w-3.5" />
