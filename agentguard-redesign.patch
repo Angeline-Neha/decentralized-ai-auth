@@ -1,0 +1,2907 @@
+diff --git a/web/index.html b/web/index.html
+index b90198c..17b997c 100644
+--- a/web/index.html
++++ b/web/index.html
+@@ -3,15 +3,15 @@
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>AgentGuard Console</title>
++    <title>AgentGuard</title>
+     <link rel="preconnect" href="https://fonts.googleapis.com" />
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+     <link
+-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
++      href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;800&family=IBM+Plex+Mono:wght@400;500&display=swap"
+       rel="stylesheet"
+     />
+   </head>
+-  <body class="bg-console-bg text-slate-100 antialiased">
++  <body class="bg-paper text-ink antialiased">
+     <div id="root"></div>
+     <script type="module" src="/src/main.tsx"></script>
+   </body>
+diff --git a/web/src/components/BlockChainView.tsx b/web/src/components/BlockChainView.tsx
+index ee055fa..1a9998d 100644
+--- a/web/src/components/BlockChainView.tsx
++++ b/web/src/components/BlockChainView.tsx
+@@ -2,7 +2,7 @@ import { formatEther } from "ethers";
+ import { Hammer, Link2, Lock, Pencil, Trash2, Unlink } from "lucide-react";
+ import { useEffect, useRef, useState } from "react";
+ import type { TamperField, VerifyBlock, VerifyResult } from "../lib/api";
+-import { copy } from "../lib/format";
++import { CopyHash } from "./ui";
+ 
+ const ZERO = "0x" + "0".repeat(64);
+ 
+@@ -33,39 +33,40 @@ const EDIT_FIELDS: Array<{ key: TamperField; label: string; hashed: boolean; rea
+ ];
+ 
+ const STYLE = {
+-  ok: { border: "border-emerald-500/50", badge: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40", label: "VALID" },
+-  tampered: { border: "border-red-500/70 bg-red-950/30", badge: "bg-red-500/25 text-red-200 border-red-500/60", label: "TAMPERED" },
+-  "broken-link": { border: "border-amber-500/70 bg-amber-950/20", badge: "bg-amber-500/25 text-amber-200 border-amber-500/60", label: "BROKEN LINK" },
++  ok: { border: "border-t-ok", badge: "bg-[#E1EEE7] text-ok", label: "Valid" },
++  tampered: { border: "border-t-bad bg-[#FBE4E5]", badge: "bg-bad text-white", label: "Tampered" },
++  "broken-link": { border: "border-t-warn bg-[#F7EBD6]/60", badge: "bg-warn text-white", label: "Broken link" },
+ } as const;
+ 
+ function Row({ label, hashed, bad, children }: { label: string; hashed?: boolean; bad?: boolean; children: React.ReactNode }) {
+   return (
+-    <div className={`flex items-start justify-between gap-3 border-b border-white/5 py-1 last:border-0 ${bad ? "text-red-300" : ""}`}>
+-      <span className="shrink-0 text-[10px] uppercase tracking-wide text-console-muted">
+-        {hashed && <span title="Included in the block hash">#</span>} {label}
++    <div className={`flex items-start justify-between gap-3 border-b border-line py-1.5 last:border-0 ${bad ? "font-semibold text-bad" : ""}`}>
++      <span className="shrink-0 text-xs text-mute">
++        {label}
++        {hashed && <span title="Included in the block hash" className="ml-1 text-ox-500">#</span>}
+       </span>
+-      <span className="min-w-0 break-all text-right font-mono text-[11px]">{children}</span>
++      <span className="min-w-0 break-all text-right font-mono text-xs">{children}</span>
+     </div>
+   );
+ }
+ 
+ function HashBox({ label, value, tone }: { label: string; value: string; tone: "neutral" | "good" | "bad" | "warn" }) {
+-  const color = { neutral: "text-slate-300", good: "text-emerald-300", bad: "text-red-300", warn: "text-amber-300" }[tone];
++  const color = { neutral: "text-ink", good: "text-ok", bad: "text-bad", warn: "text-warn" }[tone];
+   return (
+-    <button type="button" onClick={() => copy(value)} title="Click to copy" className="block w-full rounded border border-console-border bg-black/40 p-1.5 text-left">
+-      <div className="text-[9px] uppercase tracking-wider text-console-muted">{label}</div>
+-      <div className={`break-all font-mono text-[10px] leading-tight ${color}`}>{value}</div>
+-    </button>
++    <div className="bg-sunk px-2.5 py-1.5">
++      <div className="text-[11px] text-mute">{label}</div>
++      <CopyHash value={value} label={value} className={`block break-all border-transparent text-left text-[11px] leading-snug ${color}`} />
++    </div>
+   );
+ }
+ 
+ function Connector({ status }: { status: "ok" | "tampered" | "broken-link" | "pending" }) {
+   const bad = status === "tampered" || status === "broken-link";
+   return (
+-    <div className="flex w-16 shrink-0 flex-col items-center justify-center gap-1 text-[9px] font-semibold uppercase">
+-      <div className={`h-0.5 w-full ${bad ? "border-t-2 border-dashed border-red-500" : "bg-emerald-500/60"}`} />
+-      {bad ? <Unlink className="h-5 w-5 text-red-400" /> : <Link2 className={`h-5 w-5 ${status === "pending" ? "text-console-muted" : "text-emerald-400"}`} />}
+-      <span className={bad ? "text-red-400" : "text-console-muted"}>{bad ? "broken" : "prev →"}</span>
++    <div className="flex w-16 shrink-0 flex-col items-center justify-center gap-1.5 text-[11px] font-semibold">
++      <div className={`h-0.5 w-full ${bad ? "border-t-2 border-dashed border-bad" : status === "pending" ? "bg-line" : "bg-ok"}`} />
++      {bad ? <Unlink className="h-5 w-5 text-bad" /> : <Link2 className={`h-5 w-5 ${status === "pending" ? "text-mute" : "text-ok"}`} />}
++      <span className={bad ? "text-bad" : "text-mute"}>{bad ? "broken" : "prev"}</span>
+     </div>
+   );
+ }
+@@ -100,108 +101,86 @@ function BlockCard({
+   }
+ 
+   return (
+-    <div className={`panel w-[350px] shrink-0 border-2 p-3 transition ${st.border}`}>
+-      <div className="mb-2 flex flex-wrap items-center gap-2">
+-        <span className={`rounded border px-2 py-0.5 font-mono text-xs font-bold ${st.badge}`}>Block #{b.index + 1}</span>
+-        <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${st.badge}`}>{st.label}</span>
+-        <span className="ml-auto rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold">{b.outcome ?? `code ${b.code}`}</span>
++    <div className={`w-[350px] shrink-0 border border-t-4 border-line bg-card p-4 transition-colors ${st.border}`}>
++      <div className="mb-3 flex flex-wrap items-center gap-2">
++        <span className="font-mono text-base font-semibold">Block #{b.index + 1}</span>
++        <span className={`px-1.5 py-0.5 text-[11px] font-semibold ${st.badge}`}>{st.label}</span>
++        <span className="ml-auto bg-sunk px-1.5 py-0.5 text-[11px] font-semibold">{b.outcome ?? `code ${b.code}`}</span>
+       </div>
+ 
+-      <div className="rounded bg-black/30 px-2">
+-        <Row label="Timestamp">{fmtTime(b.timestamp)}</Row>
+-        <Row label="Block height" hashed bad={bad("block_number")}>
+-          #{b.blockNumber}
+-        </Row>
+-        <Row label="Intent nonce">{b.nonce ?? "—"}</Row>
+-        <Row label="Grant" hashed bad={bad("grant_id")}>
+-          #{b.grantId}
+-        </Row>
+-        <Row label="Action" hashed bad={bad("action_id") || bad("action_name")}>
+-          {b.actionName ?? short(b.actionId, 6)}
+-        </Row>
+-        <Row label="Amount" hashed bad={bad("amount")}>
+-          {fmtAmount(b.amount)}
+-        </Row>
+-        <Row label="Code" hashed bad={bad("code") || bad("outcome")}>
+-          {b.code}
+-        </Row>
+-        <Row label="Params hash" hashed bad={bad("params_hash")}>
+-          {short(b.paramsHash, 6)}
+-        </Row>
++      <div>
++        <Row label="Time">{fmtTime(b.timestamp)}</Row>
++        <Row label="Height" hashed bad={bad("block_number")}>#{b.blockNumber}</Row>
++        <Row label="Nonce">{b.nonce ?? "—"}</Row>
++        <Row label="Grant" hashed bad={bad("grant_id")}>#{b.grantId}</Row>
++        <Row label="Action" hashed bad={bad("action_id") || bad("action_name")}>{b.actionName ?? short(b.actionId, 6)}</Row>
++        <Row label="Amount" hashed bad={bad("amount")}>{fmtAmount(b.amount)}</Row>
++        <Row label="Code" hashed bad={bad("code") || bad("outcome")}>{b.code}</Row>
++        <Row label="Params" hashed bad={bad("params_hash")}>{short(b.paramsHash, 6)}</Row>
+         <Row label="Tx">{short(b.txHash, 6)}</Row>
+       </div>
+ 
+       {b.onChain && (
+-        <div className="mt-2 rounded border border-red-500/40 bg-red-950/40 p-2 text-[10px]">
+-          <div className="mb-1 font-bold uppercase text-red-300">On-chain record says</div>
++        <div className="mt-3 border-l-4 border-bad bg-[#FBE4E5] p-3 text-xs">
++          <div className="mb-1 font-semibold text-[#7A1219]">The on-chain record says</div>
+           {Object.entries(b.onChain).map(([k, v]) => (
+             <div key={k} className="flex justify-between gap-2 font-mono">
+-              <span className="text-red-300">{k}</span>
+-              <span className="break-all text-right text-emerald-300">{k === "amount" ? fmtAmount(v) : short(v, 8)}</span>
++              <span className="text-[#7A1219]">{k}</span>
++              <span className="break-all text-right text-ok">{k === "amount" ? fmtAmount(v) : short(v, 8)}</span>
+             </div>
+           ))}
+         </div>
+       )}
+ 
+-      <div className="mt-2 space-y-1.5">
++      <div className="mt-3 space-y-1.5">
+         <HashBox label="Previous hash" value={b.prevHash} tone={b.status === "broken-link" ? "warn" : "neutral"} />
+         <HashBox label="Hash (stored)" value={b.head} tone={b.status === "ok" ? "good" : "bad"} />
+         {!b.hashOk && <HashBox label="Hash it should be (recomputed)" value={b.recomputedHead} tone="warn" />}
+       </div>
+ 
+-      {b.reasons.length > 0 && <ul className="mt-2 space-y-0.5 text-[10px] text-red-300">{b.reasons.map((r) => <li key={r}>• {r}</li>)}</ul>}
++      {b.reasons.length > 0 && (
++        <ul className="mt-3 space-y-0.5 text-xs text-bad">
++          {b.reasons.map((r) => (
++            <li key={r}>{r}</li>
++          ))}
++        </ul>
++      )}
+ 
+       {editing ? (
+-        <div className="mt-3 space-y-2 rounded-lg border border-amber-500/50 bg-black/60 p-2">
+-          <div className="text-[11px] font-semibold text-amber-300">Edit Block #{b.index + 1} (off-chain copy)</div>
++        <div className="mt-4 space-y-3 border border-warn bg-[#F7EBD6]/50 p-3">
++          <div className="text-xs font-semibold text-warn">Edit block #{b.index + 1} (off-chain copy)</div>
+           <div className="grid grid-cols-2 gap-2">
+             {EDIT_FIELDS.map((f) => (
+               <label key={f.key} className={f.key === "action_id" || f.key === "params_hash" || f.key === "head" ? "col-span-2" : ""}>
+-                <span className="text-[9px] uppercase text-console-muted">
+-                  {f.hashed ? "# " : ""}
++                <span className="text-[11px] text-mute">
+                   {f.label}
++                  {f.hashed ? " #" : ""}
+                 </span>
+-                <input
+-                  className="input mt-0.5 !px-2 !py-1 text-[11px]"
+-                  value={draft[f.key] ?? ""}
+-                  onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))}
+-                />
++                <input className="input mt-0.5 !px-2 !py-1 text-xs" value={draft[f.key] ?? ""} onChange={(e) => setDraft((d) => ({ ...d, [f.key]: e.target.value }))} />
+               </label>
+             ))}
+           </div>
+           <div className="flex gap-2">
+-            <button type="button" className="btn-danger !px-3 !py-1 text-xs" disabled={busy} onClick={apply}>
++            <button type="button" className="btn-danger btn-sm" disabled={busy} onClick={apply}>
+               Apply tamper
+             </button>
+-            <button type="button" className="btn-ghost !px-3 !py-1 text-xs" onClick={() => setEditing(false)}>
++            <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(false)}>
+               Cancel
+             </button>
+           </div>
+         </div>
+       ) : (
+-        <div className="mt-3 flex flex-wrap gap-1.5">
+-          <button type="button" className="btn-ghost flex items-center gap-1 !px-2 !py-1 text-[11px]" onClick={open} disabled={busy}>
++        <div className="mt-4 flex flex-wrap gap-1.5">
++          <button type="button" className="btn-ghost btn-sm" onClick={open} disabled={busy}>
+             <Pencil className="h-3 w-3" /> Tamper
+           </button>
+-          <button
+-            type="button"
+-            className="btn-ghost flex items-center gap-1 !px-2 !py-1 text-[11px]"
+-            disabled={busy}
+-            onClick={() => onRemine(b.index, "one")}
+-            title="Attacker recomputes this block's hash so it looks self-consistent"
+-          >
++          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onRemine(b.index, "one")} title="Attacker recomputes this block's hash so it looks self-consistent">
+             <Hammer className="h-3 w-3" /> Re-mine
+           </button>
+-          <button
+-            type="button"
+-            className="btn-ghost flex items-center gap-1 !px-2 !py-1 text-[11px]"
+-            disabled={busy}
+-            onClick={() => onRemine(b.index, "all")}
+-            title="Attacker recomputes this block and every block after it"
+-          >
++          <button type="button" className="btn-ghost btn-sm" disabled={busy} onClick={() => onRemine(b.index, "all")} title="Attacker recomputes this block and every block after it">
+             <Hammer className="h-3 w-3" /> Re-mine all after
+           </button>
+-          <button type="button" className="btn-ghost flex items-center gap-1 !px-2 !py-1 text-[11px] hover:!border-red-500/60" disabled={busy} onClick={() => onDelete(b.index)}>
++          <button type="button" className="btn-ghost btn-sm hover:!border-bad hover:!text-bad" disabled={busy} onClick={() => onDelete(b.index)} aria-label={`Delete block ${b.index + 1}`} title="Delete this block">
+             <Trash2 className="h-3 w-3" />
+           </button>
+         </div>
+@@ -243,25 +222,27 @@ export function BlockChainView({
+   return (
+     <div ref={scroller} className="flex items-stretch overflow-x-auto pb-4">
+       {/* Genesis */}
+-      <div className="panel w-[350px] shrink-0 border-2 border-cyan-500/60 p-3">
+-        <div className="mb-2 flex items-center gap-2">
+-          <span className="rounded border border-cyan-500/50 bg-cyan-500/20 px-2 py-0.5 font-mono text-xs font-bold text-cyan-300">Block #0</span>
+-          <span className="rounded border border-cyan-500/50 px-1.5 py-0.5 text-[10px] font-bold text-cyan-300">GENESIS</span>
+-          <Lock className="ml-auto h-3.5 w-3.5 text-cyan-300" />
++      <div className="w-[350px] shrink-0 border border-t-4 border-line border-t-ox-600 bg-card p-4">
++        <div className="mb-3 flex items-center gap-2">
++          <span className="font-mono text-base font-semibold">Block #0</span>
++          <span className="bg-ox-600 px-1.5 py-0.5 text-[11px] font-semibold text-white">Genesis</span>
++          <Lock className="ml-auto h-3.5 w-3.5 text-ox-600" />
+         </div>
+-        <div className="rounded bg-black/30 px-2">
+-          <Row label="Timestamp">{fmtTime(g.deployed?.timestamp)}</Row>
+-          <Row label="Block height">{g.deployed ? `#${g.deployed.blockNumber}` : "—"}</Row>
++        <div>
++          <Row label="Time">{fmtTime(g.deployed?.timestamp)}</Row>
++          <Row label="Height">{g.deployed ? `#${g.deployed.blockNumber}` : "—"}</Row>
+           <Row label="Nonce">0</Row>
+           <Row label="Info">AgentGuard deployed</Row>
+           <Row label="Contract">{short(g.address, 8)}</Row>
+           <Row label="Chain id">{g.chainId}</Row>
+         </div>
+-        <div className="mt-2 space-y-1.5">
++        <div className="mt-3 space-y-1.5">
+           <HashBox label="Previous hash" value={ZERO} tone="neutral" />
+           <HashBox label="Hash H₀ (genesis head)" value={g.head} tone="good" />
+         </div>
+-        <p className="mt-2 text-[10px] text-console-muted">Every block hashes the previous block's hash, starting from H₀. The latest hash is also stored in the contract as <code>auditHead</code>.</p>
++        <p className="mt-3 text-xs leading-relaxed text-mute">
++          Each block hashes the one before it, starting from H₀. The latest hash is also stored in the contract as <code className="mono-chip">auditHead</code>.
++        </p>
+       </div>
+ 
+       {data.blocks.map((b) => (
+@@ -272,33 +253,33 @@ export function BlockChainView({
+       ))}
+ 
+       {data.missing.map((m) => (
+-        <div key={`missing-${m}`} className="ml-3 flex w-40 shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-red-500/60 p-3 text-center text-xs text-red-300">
++        <div key={`missing-${m}`} className="ml-3 flex w-40 shrink-0 items-center justify-center border-2 border-dashed border-bad p-3 text-center text-xs font-semibold text-bad">
+           Block #{m + 1} was deleted from the local copy
+         </div>
+       ))}
+ 
+       {/* Next block slot */}
+       <Connector status={locked ? "tampered" : "pending"} />
+-      <div className={`panel flex w-[300px] shrink-0 flex-col justify-center gap-2 border-2 border-dashed p-4 text-center ${locked ? "border-red-500/60" : "border-console-border"}`}>
++      <div className={`flex w-[300px] shrink-0 flex-col justify-center gap-3 border-2 border-dashed p-5 text-center ${locked ? "border-bad" : "border-line"}`}>
+         {locked ? (
+           <>
+-            <div className="text-sm font-bold text-red-300">⛔ Chain locked</div>
+-            <p className="text-[11px] text-red-200/80">The gateway refuses to append Block #{count + 1} on top of a tampered chain (HTTP 423).</p>
++            <div className="text-sm font-semibold text-bad">Chain locked</div>
++            <p className="text-xs leading-relaxed text-mute">The gateway refuses to append block #{count + 1} on top of a tampered chain (HTTP 423).</p>
+           </>
+         ) : (
+           <>
+-            <div className="text-sm font-semibold text-slate-200">Block #{count + 1}</div>
+-            <p className="break-all font-mono text-[10px] text-console-muted">will link to {short(last?.head ?? g.head, 8)}</p>
++            <div className="text-sm font-semibold">Block #{count + 1}</div>
++            <p className="break-all font-mono text-xs text-mute">will link to {short(last?.head ?? g.head, 8)}</p>
+           </>
+         )}
+-        <button type="button" className="btn-primary flex items-center justify-center gap-1.5 !py-1.5 text-xs" disabled={mining} onClick={onMine}>
++        <button type="button" className="btn-primary btn-sm justify-center" disabled={mining} onClick={onMine}>
+           <Hammer className="h-3.5 w-3.5" />
+-          {mining ? "Mining…" : locked ? "Try to mine a block" : "Mine next blocks (agent: normal day)"}
++          {mining ? "Mining…" : locked ? "Try to mine a block" : "Mine next blocks"}
+         </button>
+-        {mineNote && <p className={`text-[11px] ${mineNote.includes("refused") ? "text-red-300" : "text-emerald-300"}`}>{mineNote}</p>}
++        {mineNote && <p className={`text-xs font-semibold ${mineNote.includes("refused") ? "text-bad" : "text-ok"}`}>{mineNote}</p>}
+         {data.rejections.slice(0, 2).map((r) => (
+-          <p key={r.at + (r.action ?? "")} className="rounded bg-red-950/50 p-1.5 text-left text-[10px] text-red-200">
+-            ⛔ {fmtTime(r.at)} · {r.action ?? "block"} refused
++          <p key={r.at + (r.action ?? "")} className="bg-[#FBE4E5] p-2 text-left text-xs text-[#7A1219]">
++            {fmtTime(r.at)} · {r.action ?? "block"} refused
+           </p>
+         ))}
+       </div>
+diff --git a/web/src/components/Header.tsx b/web/src/components/Header.tsx
+index 1cad1f3..481d1e9 100644
+--- a/web/src/components/Header.tsx
++++ b/web/src/components/Header.tsx
+@@ -4,13 +4,11 @@ import { useQueryClient } from "@tanstack/react-query";
+ import { useWallet } from "../lib/wallet";
+ import { devResetDemo } from "../lib/api";
+ import { shortAddr } from "../lib/format";
+-import { useIntegrity } from "../hooks/useIntegrity";
+ 
+ export function Header() {
+   const { address, balance, chainOk, connect, connectDev, disconnect, connecting, config, isDevMode, refreshConfig } = useWallet();
+   const qc = useQueryClient();
+   const [resetting, setResetting] = useState(false);
+-  const integrity = useIntegrity().data;
+ 
+   async function handleReset() {
+     if (resetting) return;
+@@ -29,92 +27,63 @@ export function Header() {
+   }
+ 
+   return (
+-    <header className="border-b border-console-border bg-console-panel/50">
+-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+-        <div>
+-          <h1 className="text-lg font-semibold text-white">Security console</h1>
+-          <p className="text-xs text-console-muted">
+-            Policy on-chain · contract{" "}
+-            <span className="font-mono text-slate-400">{config ? shortAddr(config.address) : "…"}</span>
+-          </p>
+-        </div>
+-        <div className="flex items-center gap-3">
+-          <button
+-            type="button"
+-            className="btn-ghost flex items-center gap-1.5 text-xs text-slate-300 border border-console-border hover:bg-white/10"
+-            onClick={() => void handleReset()}
+-            disabled={resetting}
+-            title="Reset demo state: clears extra grants and audit events back to clean Grant #1"
+-          >
+-            <RotateCcw className={`h-3.5 w-3.5 ${resetting ? "animate-spin text-cyan-400" : ""}`} />
+-            {resetting ? "Resetting…" : "Reset Demo"}
+-          </button>
+-
+-          {integrity && (
+-            <span
+-              className={`rounded-full px-3 py-1 text-xs font-medium ${
+-                integrity.valid ? "bg-emerald-500/15 text-emerald-300" : "animate-pulse bg-red-500/20 text-red-300"
+-              }`}
+-              title="Audit hash-chain verification against the on-chain record"
+-            >
+-              {integrity.valid ? `Chain verified · ${integrity.entriesChecked} blocks` : "Chain TAMPERED"}
+-            </span>
+-          )}
++    <header className="border-b border-line bg-card">
++      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-3 md:px-12">
++        <p className="text-xs text-mute">
++          Contract <span className="font-mono text-ink">{config ? shortAddr(config.address) : "…"}</span>
++        </p>
+ 
++        <div className="flex flex-wrap items-center gap-2">
+           {config && config.contractLive === false && (
+-            <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-300">
++            <span className="flex items-center gap-1.5 bg-[#F7EBD6] px-2.5 py-1 text-xs font-semibold text-warn">
+               <AlertTriangle className="h-3.5 w-3.5" />
+-              No contract on chain — click Reset Demo
++              No contract on chain. Use Reset demo.
+             </span>
+           )}
+           {!chainOk && address && (
+-            <span className="flex items-center gap-1 rounded-full bg-red-500/15 px-3 py-1 text-xs text-red-300">
++            <span className="flex items-center gap-1.5 bg-bad px-2.5 py-1 text-xs font-semibold text-white">
+               <AlertTriangle className="h-3.5 w-3.5" />
+               Switch MetaMask to chain ID {config?.chainId ?? "?"}
+             </span>
+           )}
++
++          <button
++            type="button"
++            className="btn-ghost btn-sm"
++            onClick={() => void handleReset()}
++            disabled={resetting}
++            title="Clears extra grants and audit events back to a clean Grant #1"
++          >
++            <RotateCcw className={`h-3.5 w-3.5 ${resetting ? "animate-spin" : ""}`} />
++            {resetting ? "Resetting…" : "Reset demo"}
++          </button>
++
+           {address ? (
+-            <div className="flex items-center gap-2">
+-              <div className="rounded-lg border border-console-border bg-console-bg px-3 py-1.5 text-right text-xs">
+-                <div className="flex items-center gap-1.5 font-mono text-emerald-300">
+-                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${isDevMode ? "bg-cyan-400" : "bg-emerald-400"}`} />
++            <div className="flex items-center gap-2 border border-line px-3 py-1 text-right">
++              <div>
++                <p className="flex items-center justify-end gap-1.5 font-mono text-xs font-medium text-ink">
++                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${isDevMode ? "bg-warn" : "bg-ok"}`} />
+                   {shortAddr(address)}
+-                </div>
+-                <div className="text-console-muted">
+-                  {balance ?? "…"} ETH {isDevMode ? "(Dev Owner)" : ""}
+-                </div>
++                </p>
++                <p className="text-[11px] text-mute">
++                  {balance ?? "…"} ETH{isDevMode ? " · dev owner" : ""}
++                </p>
+               </div>
+-              <button
+-                type="button"
+-                className="rounded px-2 py-1 text-xs text-console-muted hover:bg-white/10 hover:text-white"
+-                onClick={disconnect}
+-                title="Disconnect"
+-              >
++              <button type="button" className="px-1.5 text-mute hover:text-ox-600" onClick={disconnect} aria-label="Disconnect wallet" title="Disconnect">
+                 ✕
+               </button>
+             </div>
+           ) : (
+-            <div className="flex items-center gap-2">
+-              <button
+-                type="button"
+-                className="btn-ghost flex items-center gap-1.5 text-xs text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/10"
+-                onClick={() => void connectDev()}
+-                disabled={connecting}
+-                title="Connect directly as Owner (Account #0) without needing browser extensions"
+-              >
++            <>
++              <button type="button" className="btn-ghost btn-sm" onClick={() => void connectDev()} disabled={connecting} title="Connect as owner (account #0) without a browser extension">
+                 <Zap className="h-3.5 w-3.5" />
+-                1-Click Owner
++                1-click owner
+               </button>
+-              <button
+-                type="button"
+-                className="btn-primary flex items-center gap-2 text-xs"
+-                onClick={() => void connect()}
+-                disabled={connecting}
+-              >
+-                <Wallet className="h-4 w-4" />
++              <button type="button" className="btn-primary btn-sm" onClick={() => void connect()} disabled={connecting}>
++                <Wallet className="h-3.5 w-3.5" />
+                 {connecting ? "Connecting…" : "Connect MetaMask"}
+               </button>
+-            </div>
++            </>
+           )}
+         </div>
+       </div>
+diff --git a/web/src/components/IntegrityBanner.tsx b/web/src/components/IntegrityBanner.tsx
+index 98014b5..0041b79 100644
+--- a/web/src/components/IntegrityBanner.tsx
++++ b/web/src/components/IntegrityBanner.tsx
+@@ -18,27 +18,19 @@ export function IntegrityBanner() {
+   const n = data.brokenAt === null ? "?" : data.brokenAt + 1;
+ 
+   return (
+-    <div className="border-b border-red-500/50 bg-red-950/70 px-4 py-2 text-xs text-red-100">
+-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
+-        <ShieldAlert className="h-4 w-4 shrink-0 text-red-300" />
+-        <div className="min-w-0 flex-1">
+-          <span className="font-semibold text-red-200">Audit chain tampered — Block #{n}</span>
+-          <span className="text-red-200/80">
+-            {" "}
+-            · {data.tamperedCount} block{data.tamperedCount === 1 ? "" : "s"} failing
+-            {data.missing.length > 0 && ` · block${data.missing.length > 1 ? "s" : ""} ${data.missing.map((m) => m + 1).join(", ")} deleted`}
+-            {first?.reasons[0] && ` · ${first.reasons[0]}`} New blocks are refused until it is restored.
+-          </span>
+-        </div>
+-        <Link to="/dev" className="rounded border border-red-400/40 px-2 py-1 font-semibold hover:bg-red-500/20">
++    <div role="alert" className="bg-bad px-6 py-3 text-sm text-white">
++      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
++        <ShieldAlert className="h-5 w-5 shrink-0" />
++        <p className="min-w-0 flex-1">
++          <strong>Audit chain tampered at block #{n}.</strong>{" "}
++          {data.tamperedCount} block{data.tamperedCount === 1 ? "" : "s"} no longer match the on-chain record
++          {data.missing.length > 0 && `, and block${data.missing.length > 1 ? "s" : ""} ${data.missing.map((m) => m + 1).join(", ")} ${data.missing.length > 1 ? "were" : "was"} deleted`}.
++          {first?.reasons[0] && ` ${first.reasons[0]}`} New blocks are refused until it is restored.
++        </p>
++        <Link to="/dev" className="border border-white/60 px-3 py-1 font-semibold hover:bg-white/15">
+           Inspect chain
+         </Link>
+-        <button
+-          type="button"
+-          className="rounded border border-red-400/40 bg-red-500/20 px-2 py-1 font-semibold hover:bg-red-500/40 disabled:opacity-50"
+-          disabled={restore.isPending}
+-          onClick={() => restore.mutate()}
+-        >
++        <button type="button" className="bg-white px-3 py-1 font-semibold text-bad hover:bg-red-50 disabled:opacity-60" disabled={restore.isPending} onClick={() => restore.mutate()}>
+           {restore.isPending ? "Restoring…" : "Restore from chain"}
+         </button>
+       </div>
+diff --git a/web/src/components/Layout.tsx b/web/src/components/Layout.tsx
+index b2d5a6b..1cc2451 100644
+--- a/web/src/components/Layout.tsx
++++ b/web/src/components/Layout.tsx
+@@ -1,19 +1,9 @@
+ import { NavLink, Outlet } from "react-router-dom";
+-import {
+-  Shield,
+-  LayoutDashboard,
+-  PlusCircle,
+-  FileSearch,
+-  Zap,
+-  ListChecks,
+-  GitBranch,
+-  Network,
+-  Wrench,
+-} from "lucide-react";
++import { LayoutDashboard, PlusCircle, FileSearch, Zap, ListChecks, GitBranch, Network, Wrench } from "lucide-react";
++import clsx from "clsx";
+ import { Header } from "./Header";
+ import { IntegrityBanner } from "./IntegrityBanner";
+-import { useIntegrityLive } from "../hooks/useIntegrity";
+-import clsx from "clsx";
++import { useIntegrity, useIntegrityLive } from "../hooks/useIntegrity";
+ 
+ const links = [
+   { to: "/", label: "Dashboard", icon: LayoutDashboard },
+@@ -21,23 +11,37 @@ const links = [
+   { to: "/audit", label: "Audit log", icon: FileSearch },
+   { to: "/approvals", label: "Approvals", icon: ListChecks },
+   { to: "/redteam", label: "Red team", icon: Zap },
+-  { to: "/merkle", label: "Merkle tree", icon: Network },
++  { to: "/merkle", label: "Merkle proof", icon: Network },
+   { to: "/delegation", label: "Delegation", icon: GitBranch },
+-  { to: "/dev", label: "Dev / demo", icon: Wrench },
++  { to: "/dev", label: "Audit chain", icon: Wrench },
+ ];
+ 
++function ChainStatus() {
++  const d = useIntegrity().data;
++  if (!d) return <p className="text-xs text-ox-300">Checking chain…</p>;
++  return (
++    <div className="text-xs leading-relaxed">
++      <p className="flex items-center gap-2 font-semibold text-white">
++        <span className={clsx("inline-block h-2 w-2", d.valid ? "rounded-full bg-[#7FD1A0]" : "animate-pulse bg-bad")} />
++        {d.valid ? "Chain verified" : "Chain tampered"}
++      </p>
++      <p className="mt-1 truncate font-mono text-ox-300">
++        {d.entriesChecked} block{d.entriesChecked === 1 ? "" : "s"} · head {d.onChainHead ? `${d.onChainHead.slice(0, 6)}…${d.onChainHead.slice(-4)}` : "—"}
++      </p>
++    </div>
++  );
++}
++
+ export function Layout() {
+   useIntegrityLive();
+   return (
+-    <div className="min-h-screen">
+-      <Header />
+-      <IntegrityBanner />
+-      <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
+-        <nav className="hidden w-52 shrink-0 flex-col gap-1 md:flex">
+-          <div className="mb-4 flex items-center gap-2 px-2 text-emerald-400">
+-            <Shield className="h-5 w-5" />
+-            <span className="text-sm font-semibold tracking-wide">AgentGuard</span>
+-          </div>
++    <div className="min-h-screen md:grid md:grid-cols-[236px_1fr]">
++      <aside className="flex flex-col bg-ox-700 text-ox-100 md:sticky md:top-0 md:h-screen">
++        <div className="px-6 pb-4 pt-7 md:pb-8">
++          <p className="text-xl font-extrabold tracking-tight text-white">AgentGuard</p>
++          <p className="mt-0.5 font-mono text-xs text-ox-300">policy enforcement</p>
++        </div>
++        <nav aria-label="Main" className="flex overflow-x-auto pb-2 md:flex-1 md:flex-col md:overflow-visible md:pb-0">
+           {links.map(({ to, label, icon: Icon }) => (
+             <NavLink
+               key={to}
+@@ -45,8 +49,8 @@ export function Layout() {
+               end={to === "/"}
+               className={({ isActive }) =>
+                 clsx(
+-                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition",
+-                  isActive ? "bg-emerald-500/15 text-emerald-300" : "text-console-muted hover:bg-white/5",
++                  "flex shrink-0 items-center gap-3 whitespace-nowrap px-6 py-2.5 text-sm font-medium transition-colors md:border-l-[3px]",
++                  isActive ? "bg-ox-800 text-white md:border-white" : "text-ox-100 hover:bg-ox-800 hover:text-white md:border-transparent",
+                 )
+               }
+             >
+@@ -55,7 +59,15 @@ export function Layout() {
+             </NavLink>
+           ))}
+         </nav>
+-        <main className="min-w-0 flex-1">
++        <div className="hidden border-t border-ox-500/60 px-6 py-5 md:block">
++          <ChainStatus />
++        </div>
++      </aside>
++
++      <div className="min-w-0">
++        <Header />
++        <IntegrityBanner />
++        <main className="mx-auto max-w-[1080px] px-6 pb-20 pt-10 md:px-12">
+           <Outlet />
+         </main>
+       </div>
+diff --git a/web/src/components/StatCard.tsx b/web/src/components/StatCard.tsx
+deleted file mode 100644
+index 4d5054d..0000000
+--- a/web/src/components/StatCard.tsx
++++ /dev/null
+@@ -1,30 +0,0 @@
+-import type { ReactNode } from "react";
+-import clsx from "clsx";
+-
+-export function StatCard({
+-  label,
+-  value,
+-  hint,
+-  tone = "neutral",
+-}: {
+-  label: string;
+-  value: ReactNode;
+-  hint?: string;
+-  tone?: "neutral" | "ok" | "warn" | "bad";
+-}) {
+-  const ring =
+-    tone === "ok"
+-      ? "border-emerald-500/30"
+-      : tone === "warn"
+-        ? "border-amber-500/30"
+-        : tone === "bad"
+-          ? "border-red-500/30"
+-          : "border-console-border";
+-  return (
+-    <div className={clsx("panel p-4", ring)}>
+-      <div className="text-xs uppercase tracking-wide text-console-muted">{label}</div>
+-      <div className="mt-1 text-2xl font-semibold tabular-nums">{value}</div>
+-      {hint && <div className="mt-1 text-xs text-console-muted">{hint}</div>}
+-    </div>
+-  );
+-}
+diff --git a/web/src/components/StatusPill.tsx b/web/src/components/StatusPill.tsx
+index 947a2d0..d8ed2a2 100644
+--- a/web/src/components/StatusPill.tsx
++++ b/web/src/components/StatusPill.tsx
+@@ -4,11 +4,11 @@ export function StatusPill({ label, tone }: { label: string; tone: "ok" | "warn"
+   return (
+     <span
+       className={clsx(
+-        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
+-        tone === "ok" && "bg-emerald-500/20 text-emerald-300",
+-        tone === "warn" && "bg-amber-500/20 text-amber-200",
+-        tone === "bad" && "bg-red-500/20 text-red-300",
+-        tone === "neutral" && "bg-slate-500/20 text-slate-300",
++        "inline-flex items-center px-2 py-0.5 text-xs font-semibold",
++        tone === "ok" && "bg-[#E1EEE7] text-ok",
++        tone === "warn" && "bg-[#F7EBD6] text-warn",
++        tone === "bad" && "bg-bad text-white",
++        tone === "neutral" && "bg-sunk text-mute",
+       )}
+     >
+       {label}
+diff --git a/web/src/components/ui.tsx b/web/src/components/ui.tsx
+new file mode 100644
+index 0000000..cc56a8d
+--- /dev/null
++++ b/web/src/components/ui.tsx
+@@ -0,0 +1,94 @@
++import { useState, type ReactNode } from "react";
++import clsx from "clsx";
++import { copy } from "../lib/format";
++
++/** Page title + one plain sentence saying what the page is for. Every page starts with this. */
++export function PageHeader({ title, lead, actions }: { title: string; lead?: ReactNode; actions?: ReactNode }) {
++  return (
++    <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
++      <div className="min-w-0">
++        <h1 className="text-3xl font-extrabold leading-tight tracking-tight text-ink">{title}</h1>
++        {lead && <p className="mt-2 max-w-[62ch] text-[15px] leading-relaxed text-mute">{lead}</p>}
++      </div>
++      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
++    </header>
++  );
++}
++
++/** A titled block with a single oxblood rule. Replaces the old identical rounded cards. */
++export function Section({ title, meta, children, className }: { title: string; meta?: ReactNode; children: ReactNode; className?: string }) {
++  return (
++    <section className={className}>
++      <h2 className="h-section">
++        {title}
++        {meta && <span>{meta}</span>}
++      </h2>
++      {children}
++    </section>
++  );
++}
++
++/** Empty states say what to do next. */
++export function Empty({ title, hint, action }: { title: string; hint?: ReactNode; action?: ReactNode }) {
++  return (
++    <div className="border border-dashed border-line px-6 py-10 text-center">
++      <p className="font-semibold text-ink">{title}</p>
++      {hint && <p className="mx-auto mt-1 max-w-[52ch] text-sm text-mute">{hint}</p>}
++      {action && <div className="mt-4 flex justify-center">{action}</div>}
++    </div>
++  );
++}
++
++const noticeTone = {
++  info: "border-ox-500 bg-ox-50 text-ox-800",
++  warn: "border-warn bg-[#F7EBD6] text-[#5B3606]",
++  bad: "border-bad bg-[#FBE4E5] text-[#7A1219]",
++  ok: "border-ok bg-[#E1EEE7] text-[#173C2C]",
++} as const;
++
++export function Notice({ tone = "info", children }: { tone?: keyof typeof noticeTone; children: ReactNode }) {
++  return <div className={clsx("border-l-4 px-4 py-3 text-sm leading-relaxed", noticeTone[tone])}>{children}</div>;
++}
++
++/** Click-to-copy hash. Confirms in place instead of a toast. */
++export function CopyHash({ value, label, className }: { value: string; label?: string; className?: string }) {
++  const [done, setDone] = useState(false);
++  return (
++    <button
++      type="button"
++      title="Copy full value"
++      onClick={() => {
++        copy(value);
++        setDone(true);
++        setTimeout(() => setDone(false), 1100);
++      }}
++      className={clsx(
++        "border-b border-dashed font-mono text-xs transition-colors",
++        done ? "border-ok text-ok" : "border-mute text-ink hover:border-ox-500 hover:text-ox-600",
++        className,
++      )}
++    >
++      {done ? "copied" : (label ?? value)}
++    </button>
++  );
++}
++
++/** Thin budget bar. Denominator zero renders empty, never NaN. */
++export function BudgetBar({ pct, tone = "brand" }: { pct: number; tone?: "brand" | "bad" }) {
++  const w = Math.max(0, Math.min(100, pct));
++  return (
++    <div className="h-2 bg-sunk" role="img" aria-label={`${Math.round(w)}% of budget used`}>
++      <div className={clsx("h-full transition-all duration-500", tone === "bad" ? "bg-bad" : "bg-ox-600")} style={{ width: `${w === 0 ? 0 : Math.max(w, 1.5)}%` }} />
++    </div>
++  );
++}
++
++export function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
++  return (
++    <label className="block">
++      <span className="field-label">{label}</span>
++      {children}
++      {hint && <span className="field-hint block">{hint}</span>}
++    </label>
++  );
++}
+diff --git a/web/src/index.css b/web/src/index.css
+index 8b51a93..bc69254 100644
+--- a/web/src/index.css
++++ b/web/src/index.css
+@@ -3,25 +3,31 @@
+ @tailwind utilities;
+ 
+ @layer base {
+-  body {
+-    @apply min-h-screen;
+-  }
++  body { @apply min-h-screen font-sans; }
++  :focus-visible { @apply outline-2 outline-offset-2 outline-ox-500; outline-style: solid; }
++  ::selection { @apply bg-ox-100 text-ox-800; }
+ }
+ 
+ @layer components {
+-  .panel {
+-    @apply rounded-xl border border-console-border bg-console-panel/80 backdrop-blur-sm;
+-  }
+-  .btn-primary {
+-    @apply rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50;
+-  }
+-  .btn-danger {
+-    @apply rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50;
+-  }
+-  .btn-ghost {
+-    @apply rounded-lg border border-console-border px-4 py-2 text-sm hover:bg-white/5 disabled:opacity-50;
+-  }
+-  .input {
+-    @apply w-full rounded-lg border border-console-border bg-console-bg px-3 py-2 font-mono text-sm outline-none focus:border-emerald-500/60;
+-  }
++  /* Cards are for things you type into. Everything else sits directly on the page. */
++  .sheet { @apply border border-line bg-card p-6; }
++
++  .btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45; }
++  .btn-primary { @apply btn bg-ox-600 text-white hover:bg-ox-500; }
++  .btn-danger { @apply btn bg-bad text-white hover:bg-red-700; }
++  .btn-ghost { @apply btn border border-line bg-card text-ink hover:border-ox-500 hover:text-ox-600; }
++  .btn-sm { @apply px-2.5 py-1 text-xs; }
++
++  .input { @apply w-full border border-line bg-card px-3 py-2 font-mono text-sm text-ink outline-none transition-colors placeholder:text-mute/60 focus:border-ox-500; }
++  .field-label { @apply mb-1 block text-sm font-semibold text-ink; }
++  .field-hint { @apply mt-1 text-xs text-mute; }
++
++  .h-section { @apply mb-1 flex items-baseline justify-between gap-4 border-b-2 border-ox-600 pb-2 text-sm font-semibold text-ox-600; }
++  .h-section > span { @apply font-mono text-xs font-normal text-mute; }
++
++  .mono-chip { @apply inline-block bg-sunk px-1.5 py-0.5 font-mono text-xs text-ink; }
++}
++
++@media (prefers-reduced-motion: reduce) {
++  .animate-draw, .animate-enter, .animate-pulse, .animate-spin { animation: none !important; }
+ }
+diff --git a/web/src/lib/format.ts b/web/src/lib/format.ts
+index 1a9ff8e..1049e4e 100644
+--- a/web/src/lib/format.ts
++++ b/web/src/lib/format.ts
+@@ -29,3 +29,40 @@ export function ethFromWei(wei: string) {
+ export function copy(text: string) {
+   void navigator.clipboard.writeText(text);
+ }
++
++/** Plain-language explanation for a contract Reason name. Falls back to the raw name. */
++const REASON_TEXT: Record<string, string> = {
++  Frozen: "The grant is frozen after repeated violations.",
++  Revoked: "The owner revoked this grant.",
++  Expired: "The grant has expired.",
++  ActionNotAllowed: "This action is not on the grant's approved list.",
++  OverCap: "The amount is above the per-call limit.",
++  RateLimit: "Too many calls in the current time window.",
++  OverBudget: "The grant's total budget would be exceeded.",
++  InsufficientEscrow: "Not enough escrowed funds to cover this.",
++  DelegationInvalid: "A delegated grant must be narrower than its parent.",
++};
++
++export function reasonText(outcome: string | null | undefined) {
++  if (!outcome) return null;
++  return REASON_TEXT[outcome] ?? outcome;
++}
++
++export type Verdict = { label: string; tone: "ok" | "warn" | "bad" | "neutral"; denied: boolean };
++
++/** One place that decides how an audit code is shown, so every page agrees. */
++export function verdict(code: number): Verdict {
++  if (code === 0) return { label: "Allowed", tone: "ok", denied: false };
++  if (code === 100) return { label: "Awaiting approval", tone: "warn", denied: false };
++  if (code === 101) return { label: "Approved", tone: "ok", denied: false };
++  if (code === 102) return { label: "Rejected by owner", tone: "neutral", denied: false };
++  if (code === 103) return { label: "Delegated", tone: "ok", denied: false };
++  return { label: "Denied", tone: "bad", denied: true };
++}
++
++export function timeAgo(ms: number) {
++  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
++  if (s < 60) return `${s}s ago`;
++  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
++  return `${Math.floor(s / 3600)}h ago`;
++}
+diff --git a/web/src/pages/Approvals.tsx b/web/src/pages/Approvals.tsx
+index c74d808..f08a976 100644
+--- a/web/src/pages/Approvals.tsx
++++ b/web/src/pages/Approvals.tsx
+@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ import { fetchPending } from "../lib/api";
+ import { ethFromWei, shortAddr } from "../lib/format";
+ import { useWallet } from "../lib/wallet";
++import { Empty, Notice, PageHeader } from "../components/ui";
+ 
+ export function ApprovalsPage() {
+   const { getContract, address } = useWallet();
+@@ -29,38 +30,45 @@ export function ApprovalsPage() {
+   });
+ 
+   const rows = q.data?.pending ?? [];
++  const err = (approve.error ?? reject.error) as Error | null;
++  const working = approve.isPending || reject.isPending;
+ 
+   return (
+-    <div className="space-y-6">
+-      <div>
+-        <h2 className="text-xl font-semibold">Approval queue</h2>
+-        <p className="text-sm text-console-muted">High-value intents waiting for owner co-sign</p>
+-      </div>
+-      {!address && <p className="text-sm text-amber-300">Connect wallet as grant owner to approve or reject.</p>}
++    <div className="space-y-8">
++      <PageHeader
++        title="Approvals"
++        lead="Payments above a grant's approval threshold wait here until you co-sign them. Nothing moves until you decide."
++      />
++
++      {!address && <Notice tone="warn">Connect the grant owner's wallet to approve or reject.</Notice>}
++      {err && <Notice tone="bad">{err.message}</Notice>}
++
+       {rows.length === 0 ? (
+-        <div className="panel p-8 text-center text-console-muted">No pending approvals</div>
++        <Empty title="Nothing waiting" hint="When an agent asks to pay more than the approval threshold, the request will show up here." />
+       ) : (
+-        <div className="grid gap-4">
++        <ul className="divide-y divide-line border-y border-line">
+           {rows.map((p) => (
+-            <div key={p.pending_id} className="panel flex flex-wrap items-center justify-between gap-4 p-4">
+-              <div>
+-                <div className="font-medium">Pending #{p.pending_id}</div>
+-                <div className="text-sm text-console-muted">
+-                  Grant {p.grant_id} · {ethFromWei(p.amount)} ETH → {shortAddr(p.payee)}
+-                </div>
+-                <div className="text-xs text-console-muted">Expires {new Date(p.expires_at * 1000).toLocaleString()}</div>
++            <li key={p.pending_id} className="flex flex-wrap items-center justify-between gap-6 py-6">
++              <div className="min-w-0">
++                <p className="text-2xl font-extrabold tracking-tight">
++                  {ethFromWei(p.amount)} <span className="text-base font-semibold text-mute">ETH</span>
++                </p>
++                <p className="mt-1 text-sm text-mute">
++                  to <span className="font-mono text-ink">{shortAddr(p.payee)}</span> · Grant #{p.grant_id} · request #{p.pending_id}
++                </p>
++                <p className="mt-0.5 text-xs text-mute">Expires {new Date(p.expires_at * 1000).toLocaleString()}</p>
+               </div>
+               <div className="flex gap-2">
+-                <button type="button" className="btn-primary" disabled={!address} onClick={() => approve.mutate(p.pending_id)}>
++                <button type="button" className="btn-primary" disabled={!address || working} onClick={() => approve.mutate(p.pending_id)}>
+                   Approve
+                 </button>
+-                <button type="button" className="btn-ghost" disabled={!address} onClick={() => reject.mutate(p.pending_id)}>
++                <button type="button" className="btn-ghost" disabled={!address || working} onClick={() => reject.mutate(p.pending_id)}>
+                   Reject
+                 </button>
+               </div>
+-            </div>
++            </li>
+           ))}
+-        </div>
++        </ul>
+       )}
+     </div>
+   );
+diff --git a/web/src/pages/AuditLog.tsx b/web/src/pages/AuditLog.tsx
+index 163f2d9..0fdec28 100644
+--- a/web/src/pages/AuditLog.tsx
++++ b/web/src/pages/AuditLog.tsx
+@@ -1,13 +1,18 @@
+ import { useMutation, useQuery } from "@tanstack/react-query";
+-import { useState } from "react";
++import { useMemo, useState } from "react";
+ import { fetchEvents, verifyAudit } from "../lib/api";
+ import { StatusPill } from "../components/StatusPill";
+-import { copy, shortHash } from "../lib/format";
++import { CopyHash, Empty, Notice, PageHeader } from "../components/ui";
++import { reasonText, shortHash, verdict } from "../lib/format";
+ import { useIntegrity } from "../hooks/useIntegrity";
++import clsx from "clsx";
++
++type Filter = "all" | "denied" | "allowed";
+ 
+ export function AuditLogPage() {
+   const eventsQ = useQuery({ queryKey: ["events-audit"], queryFn: () => fetchEvents(80), refetchInterval: 6000 });
+   const [verifyResult, setVerifyResult] = useState<Awaited<ReturnType<typeof verifyAudit>> | null>(null);
++  const [filter, setFilter] = useState<Filter>("all");
+ 
+   const verify = useMutation({
+     mutationFn: () => verifyAudit(),
+@@ -18,88 +23,105 @@ export function AuditLogPage() {
+   const integrity = useIntegrity().data;
+   const blockByIndex = new Map((integrity?.blocks ?? []).map((b) => [b.index, b]));
+ 
++  const shown = useMemo(
++    () => events.filter((e) => (filter === "all" ? true : filter === "denied" ? verdict(e.code).denied : !verdict(e.code).denied)),
++    [events, filter],
++  );
++  const deniedCount = events.filter((e) => verdict(e.code).denied).length;
++
++  const FILTERS: Array<[Filter, string, number]> = [
++    ["all", "All", events.length],
++    ["allowed", "Allowed", events.length - deniedCount],
++    ["denied", "Denied", deniedCount],
++  ];
++
+   return (
+-    <div className="space-y-6">
+-      <div className="flex flex-wrap items-center justify-between gap-4">
+-        <div>
+-          <h2 className="text-xl font-semibold">Audit log</h2>
+-          <p className="text-sm text-console-muted">Tamper-evident hash chain (indexed)</p>
+-        </div>
+-        <button type="button" className="btn-primary" disabled={verify.isPending} onClick={() => verify.mutate()}>
+-          {verify.isPending ? "Verifying…" : "Verify chain"}
+-        </button>
+-      </div>
++    <div className="space-y-8">
++      <PageHeader
++        title="Audit log"
++        lead="Every agent action, in order. Each entry's hash includes the one before it, so changing any past entry breaks every entry after it."
++        actions={
++          <button type="button" className="btn-primary" disabled={verify.isPending} onClick={() => verify.mutate()}>
++            {verify.isPending ? "Verifying…" : "Verify chain"}
++          </button>
++        }
++      />
+ 
+       {integrity && !integrity.valid && !verifyResult && (
+-        <div className="panel border-red-500/40 p-4 text-sm text-red-300">
+-          Chain broken at Block #{(integrity.brokenAt ?? 0) + 1}. The rows marked below no longer match the on-chain record.
+-        </div>
++        <Notice tone="bad">Chain broken at block #{(integrity.brokenAt ?? 0) + 1}. Rows marked below no longer match the on-chain record.</Notice>
+       )}
+-
+       {verifyResult && (
+-        <div
+-          className={`panel p-4 text-sm ${verifyResult.valid ? "border-emerald-500/40" : "border-red-500/40"}`}
+-        >
+-          {verifyResult.valid ? (
+-            <p className="text-emerald-300">Chain valid — {verifyResult.entriesChecked} entries match on-chain head.</p>
+-          ) : (
+-            <p className="text-red-300">
+-              Chain broken at index {verifyResult.brokenAt ?? "?"} — DB may have been tampered (try POST /dev/tamper-audit).
+-            </p>
+-          )}
+-          <p className="mt-2 font-mono text-xs text-console-muted">head: {shortHash(verifyResult.onChainHead)}</p>
+-        </div>
++        <Notice tone={verifyResult.valid ? "ok" : "bad"}>
++          {verifyResult.valid
++            ? `Chain valid. ${verifyResult.entriesChecked} entries match the on-chain head.`
++            : `Chain broken at index ${verifyResult.brokenAt ?? "?"}. The database copy may have been tampered with.`}
++          <span className="mt-1 block font-mono text-xs opacity-80">on-chain head {shortHash(verifyResult.onChainHead)}</span>
++        </Notice>
+       )}
+ 
+-      <div className="panel overflow-x-auto">
+-        <table className="w-full min-w-[640px] text-left text-sm">
+-          <thead className="border-b border-console-border text-xs uppercase text-console-muted">
+-            <tr>
+-              <th className="px-4 py-3">#</th>
+-              <th className="px-4 py-3">Grant</th>
+-              <th className="px-4 py-3">Action</th>
+-              <th className="px-4 py-3">Outcome</th>
+-              <th className="px-4 py-3">Head</th>
+-              <th className="px-4 py-3">Integrity</th>
+-            </tr>
+-          </thead>
+-          <tbody>
+-            {events.map((e) => {
+-              const blk = blockByIndex.get(e.index_num);
+-              const bad = !!blk && blk.status !== "ok";
+-              return (
+-              <tr key={e.index_num} className={`border-b border-console-border/50 ${bad ? "bg-red-950/30" : "hover:bg-white/[0.02]"}`}>
+-                <td className="px-4 py-2 font-mono">{e.index_num}</td>
+-                <td className="px-4 py-2">{e.grant_id}</td>
+-                <td className="px-4 py-2 font-mono text-xs">{e.action_name ?? "—"}</td>
+-                <td className="px-4 py-2">
+-                  <StatusPill
+-                    label={e.outcome ?? "?"}
+-                    tone={e.code === 0 || e.code >= 100 ? "ok" : "bad"}
+-                  />
+-                </td>
+-                <td className="px-4 py-2">
+-                  <button type="button" className="font-mono text-xs text-emerald-400 hover:underline" onClick={() => copy(e.head)}>
+-                    {shortHash(e.head)}
+-                  </button>
+-                </td>
+-                <td className="px-4 py-2 text-xs">
+-                  {!blk ? (
+-                    <span className="text-console-muted">—</span>
+-                  ) : blk.status === "ok" ? (
+-                    <span className="text-emerald-400">✓ verified</span>
+-                  ) : (
+-                    <span className="font-semibold text-red-300" title={blk.reasons.join(" ")}>
+-                      {blk.status === "tampered" ? `⚠ TAMPERED (${blk.diffs.join(", ")})` : "⛓ broken link"}
+-                    </span>
+-                  )}
+-                </td>
+-              </tr>
+-              );
+-            })}
+-          </tbody>
+-        </table>
++      <div role="tablist" aria-label="Filter entries" className="flex gap-1 border-b border-line">
++        {FILTERS.map(([key, label, n]) => (
++          <button
++            key={key}
++            type="button"
++            role="tab"
++            aria-selected={filter === key}
++            onClick={() => setFilter(key)}
++            className={clsx("-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors", filter === key ? "border-ox-600 text-ox-600" : "border-transparent text-mute hover:text-ink")}
++          >
++            {label} <span className="ml-1 font-mono text-xs font-normal">{n}</span>
++          </button>
++        ))}
+       </div>
++
++      {shown.length === 0 ? (
++        <Empty title={events.length === 0 ? "No entries yet" : "Nothing matches this filter"} hint={events.length === 0 ? "Entries appear as soon as an agent tries an action." : "Switch to All to see every entry."} />
++      ) : (
++        <div className="overflow-x-auto">
++          <table className="w-full min-w-[720px] text-left text-sm">
++            <thead>
++              <tr className="border-b-2 border-ox-600 text-xs text-ox-600">
++                <th className="py-2 pr-4 font-semibold">Entry</th>
++                <th className="py-2 pr-4 font-semibold">Grant</th>
++                <th className="py-2 pr-4 font-semibold">Action</th>
++                <th className="py-2 pr-4 font-semibold">Result</th>
++                <th className="py-2 pr-4 font-semibold">Hash</th>
++                <th className="py-2 font-semibold">Integrity</th>
++              </tr>
++            </thead>
++            <tbody>
++              {shown.map((e) => {
++                const blk = blockByIndex.get(e.index_num);
++                const bad = !!blk && blk.status !== "ok";
++                const v = verdict(e.code);
++                return (
++                  <tr key={e.index_num} className={clsx("border-b border-line align-top", bad ? "bg-[#FBE4E5]" : v.denied ? "bg-gradient-to-r from-[#FBE4E5]/70 to-transparent" : "hover:bg-card")}>
++                    <td className="py-3 pr-4 font-mono">{e.index_num}</td>
++                    <td className="py-3 pr-4">#{e.grant_id}</td>
++                    <td className="py-3 pr-4 font-mono text-xs">{e.action_name ?? "—"}</td>
++                    <td className="py-3 pr-4">
++                      <StatusPill label={v.label} tone={v.tone} />
++                      {v.denied && <p className="mt-1 max-w-[30ch] text-xs text-[#7A1219]">{reasonText(e.outcome)}</p>}
++                    </td>
++                    <td className="py-3 pr-4"><CopyHash value={e.head} label={shortHash(e.head)} /></td>
++                    <td className="py-3 text-xs">
++                      {!blk ? (
++                        <span className="text-mute">—</span>
++                      ) : blk.status === "ok" ? (
++                        <span className="font-semibold text-ok">✓ verified</span>
++                      ) : (
++                        <span className="font-semibold text-bad" title={blk.reasons.join(" ")}>
++                          {blk.status === "tampered" ? `Tampered (${blk.diffs.join(", ")})` : "Broken link"}
++                        </span>
++                      )}
++                    </td>
++                  </tr>
++                );
++              })}
++            </tbody>
++          </table>
++        </div>
++      )}
+     </div>
+   );
+ }
+diff --git a/web/src/pages/CreateGrant.tsx b/web/src/pages/CreateGrant.tsx
+index 656d707..1d1b6c2 100644
+--- a/web/src/pages/CreateGrant.tsx
++++ b/web/src/pages/CreateGrant.tsx
+@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
+ import { postManifest } from "../lib/api";
+ import { DEFAULT_ACTIONS, DEMO_AGENT } from "../lib/constants";
+ import { useWallet } from "../lib/wallet";
++import clsx from "clsx";
++import { Field, Notice, PageHeader } from "../components/ui";
+ 
+ const ALL_ACTIONS = [...DEFAULT_ACTIONS, "transfer_funds"];
+ 
+@@ -59,92 +61,113 @@ export function CreateGrantPage() {
+     }
+   }
+ 
++  const STEPS = [
++    { name: "Agent", help: "Who receives the permission" },
++    { name: "Actions", help: "What they may do" },
++    { name: "Limits", help: "How much they may spend" },
++    { name: "Review", help: "Sign and create" },
++  ];
++  const LIMITS: Array<[string, string, (v: string) => void, string]> = [
++    ["Per-call cap (ETH)", perCall, setPerCall, "Largest amount a single call may move."],
++    ["Total budget (ETH)", budget, setBudget, "Most the agent may spend across all calls."],
++    ["Escrow (ETH)", escrow, setEscrow, "Funds locked in the contract to cover spending."],
++    ["Approval threshold (ETH)", approval, setApproval, "Calls above this wait for your co-sign."],
++  ];
++
+   return (
+-    <div className="mx-auto max-w-2xl space-y-6">
+-      <div>
+-        <h2 className="text-xl font-semibold">Create grant</h2>
+-        <p className="text-sm text-console-muted">On-chain policy + Merkle action whitelist</p>
+-      </div>
++    <div className="mx-auto max-w-2xl space-y-8">
++      <PageHeader title="Create a grant" lead="Decide what one agent may do and how much it may spend. The rules are written to the contract and cannot be widened by the agent." />
+ 
+-      {!chainOk && address && <p className="text-sm text-amber-300">Please switch MetaMask network to RPC http://127.0.0.1:7545 (Chain ID 1337) before signing.</p>}
++      {!chainOk && address && <Notice tone="warn">Switch MetaMask to RPC http://127.0.0.1:7545 (chain ID 1337) before signing.</Notice>}
+ 
+-      <div className="flex gap-2 text-xs">
+-        {["Agent", "Actions", "Limits", "Sign"].map((l, i) => (
+-          <span key={l} className={i === step ? "text-emerald-400" : "text-console-muted"}>
+-            {i + 1}. {l}
+-          </span>
++      <ol className="grid grid-cols-4 gap-2" aria-label="Progress">
++        {STEPS.map((st, i) => (
++          <li key={st.name}>
++            <button
++              type="button"
++              disabled={i > step}
++              onClick={() => setStep(i)}
++              className={clsx("w-full border-t-4 pt-2 text-left", i === step ? "border-ox-600" : i < step ? "border-ox-300" : "border-line", i > step && "cursor-default")}
++            >
++              <span className={clsx("block text-sm font-semibold", i === step ? "text-ox-600" : "text-mute")}>{i + 1}. {st.name}</span>
++              <span className="hidden text-xs text-mute sm:block">{st.help}</span>
++            </button>
++          </li>
+         ))}
+-      </div>
++      </ol>
+ 
+-      <div className="panel space-y-4 p-6">
++      <div className="sheet space-y-5">
+         {step === 0 && (
+           <>
+-            <label className="block text-sm text-console-muted">Agent address</label>
+-            <input className="input" value={agent} onChange={(e) => setAgent(e.target.value)} />
+-            <button type="button" className="btn-ghost text-xs" onClick={() => setAgent(DEMO_AGENT)}>
+-              Use demo agent (Hardhat #1)
++            <Field label="Agent address" hint="The wallet the agent signs with.">
++              <input className="input" value={agent} onChange={(e) => setAgent(e.target.value)} spellCheck={false} />
++            </Field>
++            <button type="button" className="btn-ghost btn-sm" onClick={() => setAgent(DEMO_AGENT)}>
++              Use the demo agent
+             </button>
+           </>
+         )}
++
+         {step === 1 && (
+           <>
+-            <p className="text-sm text-console-muted">Toggle permitted actions</p>
+-            <div className="flex flex-wrap gap-2">
+-              {ALL_ACTIONS.map((a) => {
+-                const on = actions.includes(a);
+-                return (
+-                  <button
+-                    key={a}
+-                    type="button"
+-                    className={`rounded-full px-3 py-1 text-sm font-mono ${on ? "bg-emerald-600/30 text-emerald-200 ring-1 ring-emerald-500/50" : "bg-console-bg text-console-muted ring-1 ring-console-border"}`}
+-                    onClick={() =>
+-                      setActions((prev) => (on ? prev.filter((x) => x !== a) : [...prev, a]))
+-                    }
+-                  >
+-                    {a}
+-                  </button>
+-                );
+-              })}
++            <div>
++              <span className="field-label">Permitted actions</span>
++              <p className="field-hint mb-3 mt-0">Anything not selected is refused, even if the agent is tricked into asking.</p>
++              <div className="flex flex-wrap gap-2">
++                {ALL_ACTIONS.map((a) => {
++                  const on = actions.includes(a);
++                  return (
++                    <button
++                      key={a}
++                      type="button"
++                      aria-pressed={on}
++                      className={clsx("border px-3 py-1.5 font-mono text-sm transition-colors", on ? "border-ox-600 bg-ox-600 text-white" : "border-line bg-card text-mute hover:border-ox-500 hover:text-ox-600")}
++                      onClick={() => setActions((prev) => (on ? prev.filter((x) => x !== a) : [...prev, a]))}
++                    >
++                      {on ? "✓ " : ""}{a}
++                    </button>
++                  );
++                })}
++              </div>
+             </div>
+             <div>
+-              <div className="text-xs text-console-muted">Merkle root (live)</div>
+-              <div className="mt-1 break-all font-mono text-xs text-emerald-300">{tree.root}</div>
++              <span className="field-label">Merkle root</span>
++              <p className="break-all bg-sunk px-3 py-2 font-mono text-xs">{tree.root}</p>
++              <p className="field-hint">This one hash stands for the whole list and is what the contract stores.</p>
+             </div>
+           </>
+         )}
++
+         {step === 2 && (
+-          <div className="grid gap-4 sm:grid-cols-2">
+-            {[
+-              ["Per-call cap (ETH)", perCall, setPerCall],
+-              ["Total budget (ETH)", budget, setBudget],
+-              ["Escrow (ETH)", escrow, setEscrow],
+-              ["Approval threshold (ETH)", approval, setApproval],
+-            ].map(([label, val, set]) => (
+-              <label key={label as string} className="block text-sm">
+-                <span className="text-console-muted">{label as string}</span>
+-                <input className="input mt-1" value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} />
+-              </label>
++          <div className="grid gap-5 sm:grid-cols-2">
++            {LIMITS.map(([label, val, set, hint]) => (
++              <Field key={label} label={label} hint={hint}>
++                <input className="input" inputMode="decimal" value={val} onChange={(e) => set(e.target.value)} />
++              </Field>
+             ))}
+           </div>
+         )}
++
+         {step === 3 && (
+           <>
+-            <p className="rounded-lg bg-console-bg p-4 text-sm leading-relaxed">{preview}</p>
+-            <p className="font-mono text-xs text-console-muted">actionsRoot: {tree.root}</p>
++            <p className="border-l-4 border-ox-600 bg-ox-50 p-4 text-[15px] leading-relaxed">{preview}</p>
++            <p className="break-all font-mono text-xs text-mute">actionsRoot {tree.root}</p>
+           </>
+         )}
+-        {err && <p className="text-sm text-red-400">{err}</p>}
+-        <div className="flex justify-between pt-2">
++
++        {err && <Notice tone="bad">{err}</Notice>}
++
++        <div className="flex justify-between border-t border-line pt-5">
+           <button type="button" className="btn-ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
+             Back
+           </button>
+           {step < 3 ? (
+             <button type="button" className="btn-primary" onClick={() => setStep((s) => s + 1)} disabled={actions.length === 0}>
+-              Next
++              Continue
+             </button>
+           ) : (
+             <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>
+-              {busy ? "Signing…" : "Create grant in MetaMask"}
++              {busy ? "Waiting for signature…" : "Create grant"}
+             </button>
+           )}
+         </div>
+diff --git a/web/src/pages/Dashboard.tsx b/web/src/pages/Dashboard.tsx
+index 8d14c8f..fc4f20f 100644
+--- a/web/src/pages/Dashboard.tsx
++++ b/web/src/pages/Dashboard.tsx
+@@ -1,105 +1,140 @@
+-import { useQuery } from "@tanstack/react-query";
++import { useEffect } from "react";
++import { useQuery, useQueryClient } from "@tanstack/react-query";
+ import { Link } from "react-router-dom";
+ import { fetchEvents, fetchGrants } from "../lib/api";
+-import { StatCard } from "../components/StatCard";
+-import { StatusPill } from "../components/StatusPill";
+ import { useEventStream } from "../hooks/useEventStream";
+-import { ethFromWei, shortAddr, statusLabel, statusTone } from "../lib/format";
++import { ethFromWei, reasonText, shortAddr, shortHash, statusLabel, verdict } from "../lib/format";
+ import { GrantStatus } from "@agentguard/shared/reasons";
+-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
++import { BudgetBar, CopyHash, Empty, PageHeader, Section } from "../components/ui";
++import { StatusPill } from "../components/StatusPill";
++import { statusTone } from "../lib/format";
++import clsx from "clsx";
+ 
+ export function DashboardPage() {
++  const qc = useQueryClient();
+   const grantsQ = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 3000 });
+   const eventsQ = useQuery({ queryKey: ["events"], queryFn: () => fetchEvents(100), refetchInterval: 3000 });
+   const live = useEventStream(15);
+ 
++  // A new SSE item means the ledger is stale: refetch now instead of waiting for the poll.
++  useEffect(() => {
++    if (live.length) void qc.invalidateQueries({ queryKey: ["events"] });
++  }, [live.length, qc]);
++
+   const grants = grantsQ.data?.grants ?? [];
+   const events = eventsQ.data?.events ?? [];
+   const active = grants.filter((g) => g.status === GrantStatus.Active).length;
+   const frozen = grants.filter((g) => g.status === GrantStatus.Frozen).length;
+-  const blocked = events.filter((e) => e.code > 0 && e.code < 100).length;
++  const denied = events.filter((e) => verdict(e.code).denied).length;
+   const spent = grants.reduce((s, g) => s + BigInt(g.spent), 0n);
+-  const chartData = [...events]
+-    .reverse()
+-    .slice(-20)
+-    .map((e) => ({
+-      name: `#${e.index_num}`,
+-      ok: e.code === 0 || e.code >= 100 ? 1 : 0,
+-      deny: e.code > 0 && e.code < 100 ? 1 : 0,
+-    }));
++  const spentEth = (Number(spent) / 1e18).toFixed(3);
+ 
+-  return (
+-    <div className="space-y-6">
+-      <div>
+-        <h2 className="text-xl font-semibold">Dashboard</h2>
+-        <p className="text-sm text-console-muted">Live policy enforcement overview</p>
+-      </div>
++  const headline =
++    events.length === 0
++      ? "No agent activity yet."
++      : denied > 0
++        ? `${denied} action${denied === 1 ? " was" : "s were"} blocked.${spent === 0n ? " Nothing left the budget." : ` ${spentEth} ETH spent so far.`}`
++        : "Every action so far stayed inside policy.";
+ 
+-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+-        <StatCard label="Active grants" value={active} tone="ok" />
+-        <StatCard label="Frozen agents" value={frozen} tone={frozen ? "warn" : "neutral"} />
+-        <StatCard label="Denied (indexed)" value={blocked} tone={blocked ? "bad" : "neutral"} />
+-        <StatCard label="Budget used (ETH)" value={(Number(spent) / 1e18).toFixed(3)} hint="Across indexed grants" />
+-      </div>
++  const lead = `${active} active grant${active === 1 ? "" : "s"}, ${frozen} frozen. ${events.length} action${events.length === 1 ? "" : "s"} recorded in the audit chain.`;
++  const recent = events.slice(0, 8);
+ 
+-      {chartData.length > 0 && (
+-        <section className="panel p-4">
+-          <h3 className="mb-2 text-sm font-medium text-console-muted">Recent outcomes</h3>
+-          <div className="h-48">
+-            <ResponsiveContainer width="100%" height="100%">
+-              <BarChart data={chartData} barCategoryGap="20%">
+-                <XAxis dataKey="name" tick={{ fill: "#8b9cb3", fontSize: 10 }} />
+-                <YAxis hide domain={[0, 1]} />
+-                <Tooltip contentStyle={{ background: "#1a2332", border: "1px solid #2d3a4f" }} />
+-                <Bar dataKey="ok" stackId="a" fill="#22c55e" name="Allowed" maxBarSize={32} />
+-                <Bar dataKey="deny" stackId="a" fill="#ef4444" name="Denied" maxBarSize={32} />
+-              </BarChart>
+-            </ResponsiveContainer>
+-          </div>
+-        </section>
+-      )}
++  return (
++    <div className="space-y-12">
++      <PageHeader title={headline} lead={lead} />
+ 
+-      <div className="grid gap-6 lg:grid-cols-2">
+-        <section className="panel p-4">
+-          <h3 className="mb-3 font-medium">Grants</h3>
+-          {grants.length === 0 ? (
+-            <p className="text-sm text-console-muted">No grants yet. Create one or run npm run seed.</p>
++      <div className="grid gap-14 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
++        <Section
++          title="Action ledger"
++          meta={
++            <>
++              <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ok align-middle" />
++              live · newest first
++            </>
++          }
++        >
++          {recent.length === 0 ? (
++            <div className="mt-4">
++              <Empty title="Nothing recorded yet" hint="Run a scenario on the Red team page and each agent action will appear here, linked to the one before it." action={<Link to="/redteam" className="btn-primary">Open red team</Link>} />
++            </div>
+           ) : (
+-            <ul className="divide-y divide-console-border">
+-              {grants.map((g) => (
+-                <li key={g.id} className="flex items-center justify-between gap-2 py-3">
+-                  <div>
+-                    <Link to={`/grants/${g.id}`} className="font-mono text-sm text-emerald-300 hover:underline">
+-                      Grant #{g.id}
+-                    </Link>
+-                    <div className="text-xs text-console-muted">Agent {shortAddr(g.agent)}</div>
+-                  </div>
+-                  <div className="text-right">
+-                    <StatusPill label={statusLabel(g.status)} tone={statusTone(g.status)} />
+-                    <div className="mt-1 text-xs text-console-muted">
+-                      {ethFromWei(g.spent)} / {ethFromWei(g.total_budget)} ETH
++            <ol className="relative">
++              <span aria-hidden className="absolute bottom-8 left-[11px] top-8 w-0.5 origin-top animate-draw bg-line" />
++              {recent.map((e, i) => {
++                const v = verdict(e.code);
++                const prev = events.find((x) => x.index_num === e.index_num - 1) ?? (i === recent.length - 1 ? undefined : recent[i + 1]);
++                const why = v.denied ? reasonText(e.outcome) : null;
++                return (
++                  <li key={e.index_num} className={clsx("relative border-b border-line py-5 pl-11 last:border-0", v.denied && "-ml-3 bg-gradient-to-r from-[#FBE4E5] to-transparent pl-14", i === 0 && "animate-enter")}>
++                    <span
++                      className={clsx(
++                        "absolute top-6 h-4 w-4 border-2",
++                        v.denied ? "left-4 rounded-sm border-bad bg-bad" : "left-1 rounded-full border-ok bg-paper",
++                      )}
++                    />
++                    <div className="flex items-baseline justify-between gap-4">
++                      <span className="font-mono text-base font-medium">{e.action_name ?? "unknown action"}</span>
++                      <StatusPill label={v.label} tone={v.tone} />
+                     </div>
+-                  </div>
+-                </li>
+-              ))}
+-            </ul>
++                    <p className="mt-1 flex flex-wrap gap-x-4 text-sm text-mute">
++                      <Link to={`/grants/${e.grant_id}`} className="hover:text-ox-600 hover:underline">Grant #{e.grant_id}</Link>
++                      <span>{ethFromWei(e.amount)} ETH</span>
++                      <span>entry #{e.index_num}</span>
++                    </p>
++                    {why && <p className="mt-2 text-sm font-medium text-[#7A1219]">{why}</p>}
++                    <p className="mt-2 flex flex-wrap gap-x-5 gap-y-1 font-mono text-xs text-mute">
++                      <span>hash <CopyHash value={e.head} label={shortHash(e.head)} /></span>
++                      <span>prev {prev ? <CopyHash value={prev.head} label={shortHash(prev.head)} /> : e.index_num === 0 ? "genesis" : "…"}</span>
++                    </p>
++                  </li>
++                );
++              })}
++            </ol>
+           )}
+-        </section>
++          {events.length > recent.length && (
++            <Link to="/audit" className="mt-3 inline-block text-sm font-semibold text-ox-600 hover:underline">
++              See all {events.length} entries in the audit log
++            </Link>
++          )}
++        </Section>
++
++        <div className="space-y-10">
++          <Section title="Grants" meta={`${active} active`}>
++            {grants.length === 0 ? (
++              <div className="mt-4">
++                <Empty title="No grants yet" hint="A grant says what an agent may do and how much it may spend." action={<Link to="/create" className="btn-primary">Create a grant</Link>} />
++              </div>
++            ) : (
++              <ul>
++                {grants.map((g) => {
++                  const pct = g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 10000n) / BigInt(g.total_budget)) / 100;
++                  return (
++                    <li key={g.id} className="border-b border-line py-4 last:border-0">
++                      <div className="flex items-baseline justify-between gap-3">
++                        <Link to={`/grants/${g.id}`} className="font-semibold hover:text-ox-600 hover:underline">Grant #{g.id}</Link>
++                        <StatusPill label={statusLabel(g.status)} tone={statusTone(g.status)} />
++                      </div>
++                      <p className="mt-0.5 font-mono text-xs text-mute">{shortAddr(g.agent)}</p>
++                      <div className="mt-3"><BudgetBar pct={pct} /></div>
++                      <p className="mt-1.5 flex justify-between font-mono text-xs text-mute">
++                        <span><b className="font-medium text-ink">{ethFromWei(g.spent)}</b> ETH used</span>
++                        <span>{ethFromWei(g.total_budget)} cap</span>
++                      </p>
++                    </li>
++                  );
++                })}
++              </ul>
++            )}
++          </Section>
+ 
+-        <section className="panel p-4">
+-          <h3 className="mb-3 font-medium">Live activity</h3>
+-          <ul className="max-h-80 space-y-2 overflow-y-auto text-sm">
+-            {live.length === 0 && <li className="text-console-muted">Waiting for SSE events…</li>}
+-            {live.map((item, i) => (
+-              <li key={i} className="rounded-lg border border-console-border/60 bg-console-bg/50 px-3 py-2">
+-                <span className="text-xs uppercase text-console-muted">{item.type}</span>
+-                <pre className="mt-1 overflow-x-auto font-mono text-xs text-slate-300">
+-                  {JSON.stringify(item.data, null, 0).slice(0, 120)}…
+-                </pre>
+-              </li>
+-            ))}
+-          </ul>
+-        </section>
++          <p className="border border-line bg-card px-4 py-3 text-sm text-mute">
++            {frozen > 0 ? (
++              <><b className="text-warn">{frozen} grant{frozen === 1 ? " is" : "s are"} frozen.</b> Open it to review the strikes and unfreeze.</>
++            ) : (
++              <><b className="text-ok">No grants frozen.</b> A grant freezes after it hits its strike limit.</>
++            )}
++          </p>
++        </div>
+       </div>
+     </div>
+   );
+diff --git a/web/src/pages/DelegationTree.tsx b/web/src/pages/DelegationTree.tsx
+index e3c20bc..b1104dd 100644
+--- a/web/src/pages/DelegationTree.tsx
++++ b/web/src/pages/DelegationTree.tsx
+@@ -1,9 +1,11 @@
+ import { useQuery } from "@tanstack/react-query";
+ import { useMemo } from "react";
+-import { ReactFlow, Background, Controls, MiniMap, type Edge, type Node } from "@xyflow/react";
++import { ReactFlow, Background, Controls, type Edge, type Node } from "@xyflow/react";
+ import "@xyflow/react/dist/style.css";
++import { Link } from "react-router-dom";
+ import { fetchGrants } from "../lib/api";
+ import { ethFromWei, shortAddr, statusLabel } from "../lib/format";
++import { BudgetBar, Empty, PageHeader } from "../components/ui";
+ 
+ export function DelegationTreePage() {
+   const q = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 3000 });
+@@ -14,27 +16,24 @@ export function DelegationTreePage() {
+     const edges: Edge[] = [];
+     for (const g of grants) {
+       const depth = g.depth ?? (g.parent_id ? 1 : 0);
+-      const budgetPct =
+-        g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 100n) / BigInt(g.total_budget));
++      const budgetPct = g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 10000n) / BigInt(g.total_budget)) / 100;
+       nodes.push({
+         id: String(g.id),
+-        position: { x: 40 + depth * 240, y: 40 + g.id * 90 },
++        position: { x: 40 + depth * 260, y: 40 + g.id * 110 },
+         data: {
+           label: (
+-            <div className="rounded-lg border border-console-border bg-console-panel px-3 py-2 text-left text-xs shadow-lg">
+-              <div className="font-semibold text-emerald-300">Grant #{g.id}</div>
+-              <div className="text-console-muted">Agent {shortAddr(g.agent)}</div>
+-              <div>{statusLabel(g.status)}</div>
+-              <div className="mt-1 h-1.5 w-32 overflow-hidden rounded bg-console-bg">
+-                <div className="h-full bg-emerald-500" style={{ width: `${Math.min(budgetPct, 100)}%` }} />
+-              </div>
+-              <div className="font-mono text-[10px]">
+-                {ethFromWei(g.spent)} / {ethFromWei(g.total_budget)} ETH
++            <div className="border border-line border-l-4 border-l-ox-600 bg-card px-3 py-2.5 text-left">
++              <div className="flex items-baseline justify-between gap-2">
++                <span className="text-sm font-semibold text-ink">Grant #{g.id}</span>
++                <span className="text-[11px] text-mute">{statusLabel(g.status)}</span>
+               </div>
++              <div className="mt-0.5 font-mono text-[11px] text-mute">{shortAddr(g.agent)}</div>
++              <div className="mt-2"><BudgetBar pct={budgetPct} /></div>
++              <div className="mt-1 font-mono text-[11px] text-mute">{ethFromWei(g.spent)} / {ethFromWei(g.total_budget)} ETH</div>
+             </div>
+           ),
+         },
+-        style: { width: 180, border: "none", background: "transparent" },
++        style: { width: 200, border: "none", background: "transparent", padding: 0 },
+       });
+       if (g.parent_id && g.parent_id > 0) {
+         edges.push({
+@@ -42,29 +41,33 @@ export function DelegationTreePage() {
+           source: String(g.parent_id),
+           target: String(g.id),
+           animated: true,
+-          style: { stroke: "#22c55e88" },
++          style: { stroke: "#5A0E13", strokeWidth: 1.5 },
+         });
+       }
+     }
+     return { nodes, edges };
+   }, [grants]);
+ 
++  const hasChildren = grants.some((g) => g.parent_id && g.parent_id > 0);
++
+   return (
+-    <div className="space-y-4">
+-      <div>
+-        <h2 className="text-xl font-semibold">Delegation tree</h2>
+-        <p className="text-sm text-console-muted">Child grants must be narrower than their parent (child ⊆ parent)</p>
+-      </div>
++    <div className="space-y-8">
++      <PageHeader
++        title="Delegation"
++        lead="A grant can hand part of its authority to another agent, but never more than it holds itself. Arrows point from parent to child."
++      />
+       {grants.length === 0 ? (
+-        <p className="text-console-muted">No grants indexed yet.</p>
++        <Empty title="No grants yet" hint="Delegated grants appear here once at least one grant exists." action={<Link to="/create" className="btn-primary">Create a grant</Link>} />
+       ) : (
+-        <div className="panel h-[520px] overflow-hidden">
+-          <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }}>
+-            <Background color="#2d3a4f" gap={16} />
+-            <Controls />
+-            <MiniMap nodeColor="#22c55e" maskColor="#0f141980" />
+-          </ReactFlow>
+-        </div>
++        <>
++          <div className="h-[520px] overflow-hidden border border-line bg-card">
++            <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }} nodesConnectable={false}>
++              <Background color="#DCD3D2" gap={20} />
++              <Controls showInteractive={false} />
++            </ReactFlow>
++          </div>
++          {!hasChildren && <p className="text-sm text-mute">No delegated grants yet. Every grant here is a root grant.</p>}
++        </>
+       )}
+     </div>
+   );
+diff --git a/web/src/pages/DevTools.tsx b/web/src/pages/DevTools.tsx
+index 1e532cc..2b19d0b 100644
+--- a/web/src/pages/DevTools.tsx
++++ b/web/src/pages/DevTools.tsx
+@@ -1,6 +1,7 @@
+ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+ import { useState } from "react";
+ import { BlockChainView } from "../components/BlockChainView";
++import { Empty, Notice, PageHeader } from "../components/ui";
+ import { INTEGRITY_KEY, useIntegrity } from "../hooks/useIntegrity";
+ import { devDeleteBlock, devHealth, devRemine, devResetDemo, devRestoreAudit, devTamperAudit, runScenario, type TamperField } from "../lib/api";
+ 
+@@ -63,117 +64,108 @@ export function DevToolsPage() {
+   const busy = tamper.isPending || remine.isPending || del.isPending || restore.isPending;
+   const firstBad = data?.blocks.find((b) => b.status !== "ok");
+ 
++  const status = !data ? (
++    <span className="text-mute">Verifying…</span>
++  ) : data.blocks.length === 0 && data.valid ? (
++    <span className="text-mute">Genesis only</span>
++  ) : data.valid ? (
++    <span className="font-semibold text-ok">Valid · {data.blocks.length} blocks{data.lagging ? ", syncing" : ""}</span>
++  ) : (
++    <span className="animate-pulse font-semibold text-bad">Broken at block #{(data.brokenAt ?? 0) + 1}</span>
++  );
++
+   return (
+-    <div className="space-y-5">
+-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+-        <div>
+-          <div className="flex items-center gap-2">
+-            <span className="rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-400">On-Chain Cryptographic Ledger</span>
+-            <h2 className="text-xl font-bold tracking-tight text-slate-100">Audit blockchain</h2>
+-          </div>
+-          <p className="mt-1 text-sm text-console-muted">
+-            Edit any block to tamper with it. Every page flags it, and the gateway refuses to add new blocks until the chain is restored.
+-          </p>
+-        </div>
+-        <div className="flex flex-wrap items-center gap-2">
+-          <button type="button" className="btn-ghost text-xs" disabled={restore.isPending} onClick={() => restore.mutate()} title="Rebuild the off-chain copy from on-chain events">
+-            {restore.isPending ? "Restoring…" : "🛡️ Restore from chain"}
+-          </button>
+-          <button type="button" className="btn-primary text-xs" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
+-            {verify.isFetching ? "Verifying…" : "⚡ Re-verify"}
+-          </button>
+-          <button
+-            type="button"
+-            className="btn-danger text-xs"
+-            disabled={reset.isPending}
+-            onClick={() => confirm("Reset demo: deploy a fresh contract, wipe state, seed Grant #1?") && reset.mutate()}
+-          >
+-            {reset.isPending ? "Resetting…" : "🔄 Reset demo"}
+-          </button>
+-        </div>
+-      </div>
++    <div className="space-y-10">
++      <PageHeader
++        title="Audit chain"
++        lead="Every recorded action is a block linked to the one before it. Edit any block to see how tampering is caught, and why the chain refuses new blocks until it is restored."
++        actions={
++          <>
++            <button type="button" className="btn-ghost" disabled={restore.isPending} onClick={() => restore.mutate()} title="Rebuild the off-chain copy from on-chain events">
++              {restore.isPending ? "Restoring…" : "Restore from chain"}
++            </button>
++            <button type="button" className="btn-primary" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
++              {verify.isFetching ? "Verifying…" : "Re-verify"}
++            </button>
++            <button
++              type="button"
++              className="btn-danger"
++              disabled={reset.isPending}
++              onClick={() => confirm("Reset demo: deploy a fresh contract, wipe state, seed Grant #1?") && reset.mutate()}
++            >
++              {reset.isPending ? "Resetting…" : "Reset demo"}
++            </button>
++          </>
++        }
++      />
+ 
+-      <div className="panel grid gap-4 p-4 text-xs sm:grid-cols-4">
++      <dl className="grid gap-x-8 gap-y-5 border-y border-line py-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+         <div>
+-          <div className="text-console-muted">RPC endpoint</div>
+-          <div className="mt-1 font-mono font-semibold text-slate-200">{health.data?.rpcUrl ?? "…"}</div>
++          <dt className="text-xs text-mute">RPC endpoint</dt>
++          <dd className="mt-0.5 font-mono">{health.data?.rpcUrl ?? "…"}</dd>
+         </div>
+         <div className="min-w-0">
+-          <div className="text-console-muted">Contract</div>
+-          <div className="mt-1 truncate font-mono font-semibold text-emerald-300" title={health.data?.contract}>
+-            {health.data?.contract ?? "Loading…"}
+-          </div>
++          <dt className="text-xs text-mute">Contract</dt>
++          <dd className="mt-0.5 truncate font-mono" title={health.data?.contract}>{health.data?.contract ?? "Loading…"}</dd>
+         </div>
+         <div>
+-          <div className="text-console-muted">Chain id / status</div>
+-          <div className="mt-1 font-mono font-semibold text-slate-200">
+-            {health.data?.chainId ?? "—"} • {health.data?.contractLive ? "🟢 live" : "🟡 offline"}
+-          </div>
++          <dt className="text-xs text-mute">Chain id · status</dt>
++          <dd className="mt-0.5 font-mono">
++            {health.data?.chainId ?? "—"} · {health.data?.contractLive ? <span className="text-ok">live</span> : <span className="text-warn">offline</span>}
++          </dd>
+         </div>
+         <div>
+-          <div className="text-console-muted">Hash-chain verification</div>
+-          <div className="mt-1 font-mono font-semibold">
+-            {!data ? (
+-              <span className="text-slate-400">Verifying…</span>
+-            ) : data.blocks.length === 0 && data.valid ? (
+-              <span className="text-slate-400">Genesis only</span>
+-            ) : data.valid ? (
+-              <span className="text-emerald-400">✅ VALID ({data.blocks.length} blocks{data.lagging ? ", syncing" : ""})</span>
+-            ) : (
+-              <span className="animate-pulse font-bold text-red-400">🚨 BROKEN at Block #{(data.brokenAt ?? 0) + 1}</span>
+-            )}
+-          </div>
+-          {data && !data.chainAvailable && <div className="mt-1 text-[10px] text-amber-300">On-chain record unreachable — checking hash links only.</div>}
++          <dt className="text-xs text-mute">Hash-chain check</dt>
++          <dd className="mt-0.5 font-mono">{status}</dd>
++          {data && !data.chainAvailable && <p className="mt-1 text-xs text-warn">On-chain record unreachable. Checking hash links only.</p>}
+         </div>
+-      </div>
++      </dl>
+ 
+-      {error && <div className="rounded-lg border border-red-500/40 bg-red-950/40 p-3 text-xs text-red-200">{error}</div>}
++      {error && <Notice tone="bad">{error}</Notice>}
+ 
+       {data && !data.valid && (
+-        <div className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-xs text-red-200">
+-          <div className="font-bold text-red-300">🚨 Tampering detected — {data.tamperedCount} block(s) failing verification</div>
+-          <p className="mt-1 text-red-300/90">
+-            {firstBad ? `Block #${firstBad.index + 1}: ${firstBad.reasons.join(" ")}` : data.missing.length ? "One or more blocks were deleted." : "The final hash differs from the contract's auditHead."}{" "}
+-            <strong>Red</strong> = the block's content differs from the on-chain record. <strong>Amber</strong> = the block is intact, but the block before it changed, so its link
+-            no longer verifies.
+-          </p>
+-        </div>
++        <Notice tone="bad">
++          <b>Tampering detected. {data.tamperedCount} block{data.tamperedCount === 1 ? "" : "s"} failing verification.</b>{" "}
++          {firstBad ? `Block #${firstBad.index + 1}: ${firstBad.reasons.join(" ")}` : data.missing.length ? "One or more blocks were deleted." : "The final hash differs from the contract's auditHead."}{" "}
++          Red means the block's content differs from the on-chain record. Amber means the block is intact but the one before it changed, so its link no longer verifies.
++        </Notice>
+       )}
+ 
+-      <div className="flex flex-wrap items-center justify-between gap-2">
+-        <h3 className="text-sm font-semibold uppercase tracking-wider text-console-muted">Blockchain — scroll →</h3>
+-        <span className="font-mono text-[11px] text-console-muted"># = covered by hash · H(i) = keccak256(H(i-1) ‖ grant ‖ action ‖ amount ‖ params ‖ code ‖ height)</span>
+-      </div>
+-
+-      {data ? (
+-        <BlockChainView
+-          data={data}
+-          busy={busy}
+-          mining={mine.isPending}
+-          mineNote={mineNote}
+-          onTamper={(index, fields) => tamper.mutate({ index, fields })}
+-          onRemine={(index, mode) => remine.mutate({ index, mode })}
+-          onDelete={(index) => del.mutate(index)}
+-          onMine={() => mine.mutate()}
+-        />
+-      ) : (
+-        <div className="panel p-8 text-center text-sm text-console-muted">Loading chain…</div>
+-      )}
++      <div>
++        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
++          <h2 className="text-sm font-semibold text-ox-600">Blocks · scroll sideways</h2>
++          <p className="font-mono text-xs text-mute">H(i) = keccak256(H(i-1) ‖ grant ‖ action ‖ amount ‖ params ‖ code ‖ height)</p>
++        </div>
+ 
+-      {data && data.blocks.length === 0 && (
+-        <p className="text-center text-xs text-console-muted">No action blocks yet — click “Mine next blocks” above (needs the agent on :8000) to append some.</p>
+-      )}
++        {data ? (
++          <BlockChainView
++            data={data}
++            busy={busy}
++            mining={mine.isPending}
++            mineNote={mineNote}
++            onTamper={(index, fields) => tamper.mutate({ index, fields })}
++            onRemine={(index, mode) => remine.mutate({ index, mode })}
++            onDelete={(index) => del.mutate(index)}
++            onMine={() => mine.mutate()}
++          />
++        ) : (
++          <Empty title="Loading chain…" />
++        )}
++        {data && data.blocks.length === 0 && (
++          <p className="mt-2 text-sm text-mute">No action blocks yet. Use “Mine next blocks” (needs the agent on port 8000).</p>
++        )}
++      </div>
+ 
+-      <div className="panel space-y-2 p-4 text-xs text-console-muted">
+-        <h4 className="font-semibold text-slate-200">Try it (viva walkthrough)</h4>
+-        <ol className="list-decimal space-y-1 pl-5">
+-          <li><strong className="text-slate-300">Tamper</strong> a block (e.g. change its amount) → that block turns red, the banner appears on every page, and the on-chain value is shown next to yours.</li>
+-          <li>Click <strong className="text-slate-300">Mine next blocks</strong> → the gateway answers 423 and nothing is appended.</li>
+-          <li><strong className="text-slate-300">Re-mine</strong> the block (attacker fixes its hash) → it looks consistent, but the <em>next</em> block's link breaks and it still differs from the chain.</li>
+-          <li><strong className="text-slate-300">Re-mine all after</strong> → every local hash verifies, yet it is still caught because the contract's <code>auditHead</code> and events are the anchor.</li>
+-          <li><strong className="text-slate-300">Restore from chain</strong> → rebuilt from on-chain events, banner clears, mining works again.</li>
++      <details className="border-t border-line pt-5">
++        <summary className="cursor-pointer text-sm font-semibold text-ox-600">Walk through a tamper demo</summary>
++        <ol className="mt-4 max-w-[72ch] list-decimal space-y-2.5 pl-5 text-sm leading-relaxed text-mute">
++          <li><b className="text-ink">Tamper</b> with a block (for example its amount). It turns red, a banner appears on every page, and the on-chain value is shown beside yours.</li>
++          <li>Click <b className="text-ink">Mine next blocks</b>. The gateway answers 423 and nothing is appended.</li>
++          <li><b className="text-ink">Re-mine</b> the block, as an attacker fixing its hash. It looks consistent, but the next block's link breaks and it still differs from the chain.</li>
++          <li><b className="text-ink">Re-mine all after</b>. Every local hash now verifies, yet it is still caught, because the contract's <code className="mono-chip">auditHead</code> and events are the anchor.</li>
++          <li><b className="text-ink">Restore from chain</b>. The copy is rebuilt from on-chain events, the banner clears, and mining works again.</li>
+         </ol>
+-      </div>
++      </details>
+     </div>
+   );
+ }
+diff --git a/web/src/pages/GrantDetail.tsx b/web/src/pages/GrantDetail.tsx
+index d65f734..cf83fa9 100644
+--- a/web/src/pages/GrantDetail.tsx
++++ b/web/src/pages/GrantDetail.tsx
+@@ -3,9 +3,11 @@ import { useState } from "react";
+ import { Link, useParams } from "react-router-dom";
+ import { fetchGrant } from "../lib/api";
+ import { StatusPill } from "../components/StatusPill";
+-import { ethFromWei, shortAddr, statusLabel, statusTone } from "../lib/format";
++import { BudgetBar, CopyHash, Empty, Notice, PageHeader, Section } from "../components/ui";
++import { ethFromWei, reasonText, shortAddr, statusLabel, statusTone, verdict } from "../lib/format";
+ import { useWallet } from "../lib/wallet";
+ import { GrantStatus } from "@agentguard/shared/reasons";
++import clsx from "clsx";
+ 
+ export function GrantDetailPage() {
+   const { id } = useParams();
+@@ -28,7 +30,10 @@ export function GrantDetailPage() {
+       const tx = await c.revoke(grantId);
+       await tx.wait();
+     },
+-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["grant", grantId] }),
++    onSuccess: () => {
++      setConfirmRevoke(false);
++      void qc.invalidateQueries({ queryKey: ["grant", grantId] });
++    },
+   });
+ 
+   const unfreeze = useMutation({
+@@ -41,110 +46,121 @@ export function GrantDetailPage() {
+     onSuccess: () => void qc.invalidateQueries({ queryKey: ["grant", grantId] }),
+   });
+ 
+-  if (q.isLoading) return <p className="text-console-muted">Loading…</p>;
+-  if (!q.data) return <p className="text-red-400">Grant not found</p>;
++  if (q.isLoading) return <p className="text-mute">Loading grant…</p>;
++  if (!q.data) return <Empty title="Grant not found" hint={`There is no grant #${id}.`} action={<Link to="/" className="btn-ghost">Back to dashboard</Link>} />;
+ 
+   const g = q.data.grant;
+   const budgetLeft = BigInt(g.total_budget) - BigInt(g.spent);
+-  const pct = g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 100n) / BigInt(g.total_budget));
++  const pct = g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 10000n) / BigInt(g.total_budget)) / 100;
+   const strikes = q.data.onChain.strikes;
+   const maxStrikes = g.max_strikes;
++  const err = (revoke.error ?? unfreeze.error) as Error | null;
+ 
+   return (
+-    <div className="space-y-6">
+-      <div className="flex flex-wrap items-center justify-between gap-4">
+-        <div>
+-          <Link to="/" className="text-xs text-console-muted hover:text-white">
+-            ← Dashboard
+-          </Link>
+-          <h2 className="text-xl font-semibold">Grant #{grantId}</h2>
+-        </div>
+-        <StatusPill label={statusLabel(g.status)} tone={statusTone(g.status)} />
++    <div className="space-y-12">
++      <div>
++        <Link to="/" className="mb-3 inline-block text-sm text-mute hover:text-ox-600">← Dashboard</Link>
++        <PageHeader
++          title={`Grant #${grantId}`}
++          lead={`Agent ${shortAddr(g.agent)} may spend up to ${ethFromWei(g.total_budget)} ETH until ${new Date(g.expiry * 1000).toLocaleDateString()}.`}
++          actions={<StatusPill label={statusLabel(g.status)} tone={statusTone(g.status)} />}
++        />
+       </div>
+ 
+-      <div className="grid gap-4 lg:grid-cols-3">
+-        <div className="panel p-4 lg:col-span-2">
+-          <h3 className="text-sm font-medium text-console-muted">Budget</h3>
+-          <div className="mt-2 h-3 overflow-hidden rounded-full bg-console-bg">
+-            <div className="h-full bg-emerald-500/80 transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+-          </div>
+-          <p className="mt-2 font-mono text-sm">
+-            {ethFromWei(g.spent)} spent · {ethFromWei(budgetLeft.toString())} left · escrow {ethFromWei(g.escrow)} ETH
+-          </p>
+-          <dl className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
+-            <div>
+-              <dt className="text-console-muted">Agent</dt>
+-              <dd className="font-mono">{shortAddr(g.agent)}</dd>
+-            </div>
+-            <div>
+-              <dt className="text-console-muted">Owner</dt>
+-              <dd className="font-mono">{shortAddr(g.owner)}</dd>
+-            </div>
+-            <div>
+-              <dt className="text-console-muted">Nonce</dt>
+-              <dd className="font-mono">{q.data.onChain.nonce}</dd>
+-            </div>
+-            <div>
+-              <dt className="text-console-muted">Expiry</dt>
+-              <dd>{new Date(g.expiry * 1000).toLocaleString()}</dd>
+-            </div>
+-          </dl>
+-          {q.data.manifest && (
+-            <p className="mt-3 text-xs text-console-muted">Actions: {q.data.manifest.actions.join(", ")}</p>
+-          )}
++      <div className="grid gap-14 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
++        <div className="space-y-12">
++          <Section title="Budget" meta={`${pct.toFixed(pct < 10 ? 1 : 0)}% used`}>
++            <div className="mt-5"><BudgetBar pct={pct} /></div>
++            <p className="mt-3 flex flex-wrap gap-x-6 font-mono text-sm text-mute">
++              <span><b className="font-medium text-ink">{ethFromWei(g.spent)}</b> spent</span>
++              <span><b className="font-medium text-ink">{ethFromWei(budgetLeft.toString())}</b> left</span>
++              <span><b className="font-medium text-ink">{ethFromWei(g.escrow)}</b> in escrow</span>
++            </p>
++          </Section>
++
++          <Section title="Details">
++            <dl className="divide-y divide-line text-sm">
++              {[
++                ["Agent", <span className="font-mono">{shortAddr(g.agent)}</span>],
++                ["Owner", <span className="font-mono">{shortAddr(g.owner)}</span>],
++                ["Nonce", <span className="font-mono">{q.data.onChain.nonce}</span>],
++                ["Expires", new Date(g.expiry * 1000).toLocaleString()],
++              ].map(([k, v]) => (
++                <div key={k as string} className="flex justify-between gap-6 py-3">
++                  <dt className="text-mute">{k}</dt>
++                  <dd>{v}</dd>
++                </div>
++              ))}
++            </dl>
++            {q.data.manifest && (
++              <div className="mt-4 flex flex-wrap items-center gap-2">
++                <span className="mr-1 text-sm text-mute">Allowed actions</span>
++                {q.data.manifest.actions.map((a) => <span key={a} className="mono-chip">{a}</span>)}
++              </div>
++            )}
++          </Section>
++
++          <Section title="Recent activity" meta="this grant">
++            {q.data.recentAudit.length === 0 ? (
++              <p className="py-6 text-sm text-mute">No actions recorded for this grant yet.</p>
++            ) : (
++              <ul className="divide-y divide-line">
++                {q.data.recentAudit.map((e) => {
++                  const v = verdict(e.code);
++                  return (
++                    <li key={e.index_num} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3">
++                      <span>
++                        <span className="font-mono text-sm">{e.action_name ?? "unknown"}</span>
++                        {v.denied && <span className="ml-3 text-sm text-[#7A1219]">{reasonText(e.outcome)}</span>}
++                      </span>
++                      <span className="flex items-center gap-3">
++                        <StatusPill label={v.label} tone={v.tone} />
++                        <CopyHash value={e.head} label={`#${e.index_num}`} />
++                      </span>
++                    </li>
++                  );
++                })}
++              </ul>
++            )}
++          </Section>
+         </div>
+ 
+-        <div className="panel flex flex-col gap-4 p-4">
+-          <div>
+-            <h3 className="text-sm font-medium">Circuit breaker</h3>
+-            <div className="mt-2 flex gap-2">
++        <div className="space-y-10">
++          <Section title="Circuit breaker" meta={`${strikes} of ${maxStrikes} strikes`}>
++            <div className="mt-5 flex gap-1.5" role="img" aria-label={`${strikes} of ${maxStrikes} strikes`}>
+               {Array.from({ length: maxStrikes }).map((_, i) => (
+-                <span
+-                  key={i}
+-                  className={`h-3 w-8 rounded-full ${i < strikes ? "bg-red-500" : "bg-console-border"}`}
+-                />
++                <span key={i} className={clsx("h-3 flex-1", i < strikes ? "bg-bad" : "bg-sunk")} />
+               ))}
+             </div>
+-            <p className="mt-1 text-xs text-console-muted">
+-              {strikes} / {maxStrikes} strikes
+-            </p>
+-          </div>
+-          {g.status === GrantStatus.Frozen && (
+-            <button type="button" className="btn-ghost" disabled={!address} onClick={() => unfreeze.mutate()}>
+-              Unfreeze (owner)
+-            </button>
+-          )}
+-          {!confirmRevoke ? (
+-            <button type="button" className="btn-danger" disabled={!address || g.status === GrantStatus.Revoked} onClick={() => setConfirmRevoke(true)}>
+-              Kill switch
+-            </button>
+-          ) : (
+-            <div className="space-y-2">
+-              <p className="text-xs text-red-200">Revoke grant and refund escrow?</p>
+-              <button type="button" className="btn-danger w-full" onClick={() => revoke.mutate()}>
+-                Confirm revoke
+-              </button>
+-              <button type="button" className="btn-ghost w-full text-xs" onClick={() => setConfirmRevoke(false)}>
+-                Cancel
+-              </button>
++            <p className="mt-3 text-sm text-mute">Each denied action adds a strike. At {maxStrikes}, the grant freezes until the owner unfreezes it.</p>
++          </Section>
++
++          <Section title="Owner controls">
++            <div className="mt-4 space-y-3">
++              {!address && <Notice tone="warn">Connect the owner wallet to use these controls.</Notice>}
++              {err && <Notice tone="bad">{err.message}</Notice>}
++              {g.status === GrantStatus.Frozen && (
++                <button type="button" className="btn-ghost w-full" disabled={!address || unfreeze.isPending} onClick={() => unfreeze.mutate()}>
++                  {unfreeze.isPending ? "Unfreezing…" : "Unfreeze grant"}
++                </button>
++              )}
++              {!confirmRevoke ? (
++                <button type="button" className="btn-danger w-full" disabled={!address || g.status === GrantStatus.Revoked} onClick={() => setConfirmRevoke(true)}>
++                  {g.status === GrantStatus.Revoked ? "Grant revoked" : "Revoke grant"}
++                </button>
++              ) : (
++                <div className="space-y-2 border border-bad bg-[#FBE4E5] p-4">
++                  <p className="text-sm font-semibold text-[#7A1219]">Revoke this grant and refund the escrow? This cannot be undone.</p>
++                  <button type="button" className="btn-danger w-full" disabled={revoke.isPending} onClick={() => revoke.mutate()}>
++                    {revoke.isPending ? "Revoking…" : "Yes, revoke"}
++                  </button>
++                  <button type="button" className="btn-ghost w-full" onClick={() => setConfirmRevoke(false)}>Keep grant</button>
++                </div>
++              )}
+             </div>
+-          )}
++          </Section>
+         </div>
+       </div>
+-
+-      <section className="panel p-4">
+-        <h3 className="mb-2 font-medium">Recent audit</h3>
+-        <ul className="divide-y divide-console-border text-sm">
+-          {q.data.recentAudit.map((e) => (
+-            <li key={e.index_num} className="flex justify-between py-2">
+-              <span>
+-                {e.action_name ?? "—"} · <StatusPill label={e.outcome ?? "?"} tone={e.code === 0 ? "ok" : "bad"} />
+-              </span>
+-              <span className="font-mono text-xs text-console-muted">#{e.index_num}</span>
+-            </li>
+-          ))}
+-        </ul>
+-      </section>
+     </div>
+   );
+ }
+diff --git a/web/src/pages/MerkleVisualizer.tsx b/web/src/pages/MerkleVisualizer.tsx
+index f2884aa..e1c64d1 100644
+--- a/web/src/pages/MerkleVisualizer.tsx
++++ b/web/src/pages/MerkleVisualizer.tsx
+@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
+ import { useMemo, useState } from "react";
+ import { fetchGrant, fetchProof } from "../lib/api";
+ import { AbiCoder, keccak256 } from "ethers";
++import clsx from "clsx";
++import { CopyHash, Notice, PageHeader, Section } from "../components/ui";
+ 
+ export function MerkleVisualizerPage() {
+   const [grantId, setGrantId] = useState(1);
+@@ -118,399 +120,194 @@ export function MerkleVisualizerPage() {
+     });
+   }, [tree, actions, activeActionName, proofSet]);
+ 
+-  return (
+-    <div className="space-y-6">
+-      {/* Header */}
+-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+-        <div>
+-          <div className="flex items-center gap-2">
+-            <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30">
+-              Cryptographic Policy
+-            </span>
+-            <h2 className="text-xl font-bold tracking-tight text-slate-100">Merkle Proof Visualizer</h2>
+-          </div>
+-          <p className="mt-1 text-sm text-console-muted">
+-            Interactive zero-knowledge inclusion proof verification for agent capability manifests
+-          </p>
+-        </div>
+-
+-        {/* Grant Selector */}
+-        <div className="flex items-center gap-3">
+-          <label className="text-xs font-semibold uppercase tracking-wider text-console-muted">Grant ID</label>
+-          <input
+-            className="input w-24 text-center font-mono"
+-            type="number"
+-            min={1}
+-            value={grantId}
+-            onChange={(e) => setGrantId(Number(e.target.value))}
+-          />
+-        </div>
+-      </div>
++  const valid = !!verificationResult?.valid;
+ 
+-      {/* Overview Cards */}
+-      <div className="grid gap-4 sm:grid-cols-3">
+-        <div className="panel p-4">
+-          <div className="text-xs uppercase font-semibold text-console-muted">On-Chain Root (Storage)</div>
+-          <div className="mt-1 break-all font-mono text-xs text-cyan-300">
+-            {tree ? tree.root : "No manifest loaded"}
+-          </div>
+-          <p className="mt-2 text-[11px] text-console-muted">
+-            Single 32-byte hash committed to smart contract (O(1) storage)
+-          </p>
+-        </div>
+-
+-        <div className="panel p-4">
+-          <div className="text-xs uppercase font-semibold text-console-muted">Manifest Actions (Leaves)</div>
+-          <div className="mt-1 font-mono text-lg font-bold text-slate-200">
+-            {actions.length} Authorized Actions
+-          </div>
+-          <div className="mt-2 flex flex-wrap gap-1">
+-            {actions.map((a) => (
+-              <span key={a} className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
+-                {a}
+-              </span>
+-            ))}
+-          </div>
+-        </div>
+-
+-        <div className="panel p-4">
+-          <div className="text-xs uppercase font-semibold text-console-muted">Proof Complexity</div>
+-          <div className="mt-1 font-mono text-lg font-bold text-amber-400">
+-            {proofList.length} Sibling Hashes (O(log₂ N))
+-          </div>
+-          <p className="mt-2 text-[11px] text-console-muted">
+-            Proves membership without revealing other unauthorized capabilities
+-          </p>
++  return (
++    <div className="space-y-12">
++      <PageHeader
++        title="Merkle proof"
++        lead="The contract stores one hash for a grant's whole list of allowed actions. To use an action, the agent must prove it is in that list without revealing the rest."
++        actions={
++          <label className="flex items-center gap-2 text-sm font-semibold">
++            Grant
++            <input className="input w-20 text-center" type="number" min={1} value={grantId} onChange={(e) => setGrantId(Number(e.target.value))} />
++          </label>
++        }
++      />
++
++      {/* What is being tested */}
++      <section aria-label="Choose an action to test" className="space-y-4">
++        <div role="tablist" aria-label="Test mode" className="inline-flex border border-line">
++          {([["whitelisted", "Allowed action"], ["custom", "Unauthorized action"]] as const).map(([mode, label]) => (
++            <button
++              key={mode}
++              type="button"
++              role="tab"
++              aria-selected={testMode === mode}
++              onClick={() => {
++                setTestMode(mode);
++                if (mode === "custom" && !customAction) setCustomAction("transfer_funds");
++              }}
++              className={clsx("px-4 py-2 text-sm font-semibold transition-colors", testMode === mode ? (mode === "custom" ? "bg-bad text-white" : "bg-ox-600 text-white") : "bg-card text-mute hover:text-ink")}
++            >
++              {label}
++            </button>
++          ))}
+         </div>
+-      </div>
+-
+-      {/* Action Selector & Tamper Test */}
+-      <div className="panel p-4">
+-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+-          <div>
+-            <h3 className="text-sm font-semibold text-slate-200">Select Capability to Verify</h3>
+-            <p className="text-xs text-console-muted">
+-              Choose an authorized action from the manifest or test an unauthorized capability
+-            </p>
+-          </div>
+ 
+-          <div className="flex flex-wrap items-center gap-2">
+-            <div className="flex rounded-lg border border-console-border bg-black/40 p-1">
++        {testMode === "whitelisted" ? (
++          <div className="flex flex-wrap gap-2">
++            {actions.map((act) => (
+               <button
++                key={act}
+                 type="button"
+-                onClick={() => setTestMode("whitelisted")}
+-                className={`rounded px-3 py-1 text-xs font-medium transition ${
+-                  testMode === "whitelisted" ? "bg-emerald-500/20 text-emerald-300 font-bold" : "text-console-muted hover:text-slate-200"
+-                }`}
++                aria-pressed={selectedAction === act}
++                onClick={() => setSelectedAction(act)}
++                className={clsx("border px-3 py-1.5 font-mono text-sm transition-colors", selectedAction === act ? "border-ox-600 bg-ox-50 font-medium text-ox-700" : "border-line bg-card text-mute hover:border-ox-500")}
+               >
+-                Whitelisted Action
++                {act}
+               </button>
+-              <button
+-                type="button"
+-                onClick={() => {
+-                  setTestMode("custom");
+-                  if (!customAction) setCustomAction("transfer_funds");
+-                }}
+-                className={`rounded px-3 py-1 text-xs font-medium transition ${
+-                  testMode === "custom" ? "bg-red-500/20 text-red-300 font-bold" : "text-console-muted hover:text-slate-200"
+-                }`}
+-              >
+-                Test Unauthorized Action
++            ))}
++          </div>
++        ) : (
++          <div className="flex flex-wrap gap-2">
++            <input className="input max-w-sm flex-1" placeholder="e.g. drain_vault" value={customAction} onChange={(e) => setCustomAction(e.target.value)} />
++            {["transfer_funds", "drain_escrow", "delegate_admin"].map((preset) => (
++              <button key={preset} type="button" onClick={() => setCustomAction(preset)} className="btn-ghost btn-sm font-mono">
++                {preset}
+               </button>
+-            </div>
++            ))}
+           </div>
+-        </div>
++        )}
++      </section>
+ 
+-        <div className="mt-4 flex flex-wrap gap-3">
+-          {testMode === "whitelisted" ? (
+-            <div className="flex flex-wrap gap-2">
+-              {actions.map((act) => (
+-                <button
+-                  key={act}
+-                  type="button"
+-                  onClick={() => setSelectedAction(act)}
+-                  className={`rounded-lg border px-3 py-1.5 font-mono text-xs transition ${
+-                    selectedAction === act
+-                      ? "border-emerald-500 bg-emerald-500/15 text-emerald-200 font-semibold shadow-sm"
+-                      : "border-console-border bg-slate-900/60 text-slate-300 hover:border-slate-600"
+-                  }`}
+-                >
+-                  {act}
+-                </button>
+-              ))}
+-            </div>
+-          ) : (
+-            <div className="flex w-full flex-wrap gap-2">
+-              <input
+-                type="text"
+-                placeholder="e.g. transfer_funds, drain_vault, execute_shell"
+-                value={customAction}
+-                onChange={(e) => setCustomAction(e.target.value)}
+-                className="input flex-1 font-mono text-sm"
+-              />
+-              <div className="flex gap-2">
+-                {["transfer_funds", "drain_escrow", "delegate_admin"].map((preset) => (
+-                  <button
+-                    key={preset}
+-                    type="button"
+-                    onClick={() => setCustomAction(preset)}
+-                    className="btn-ghost text-xs font-mono"
+-                  >
+-                    +{preset}
+-                  </button>
+-                ))}
+-              </div>
+-            </div>
+-          )}
+-        </div>
+-      </div>
+-
+-      {/* Main Visualizer Area */}
+       {tree && (
+-        <div className="grid gap-6 lg:grid-cols-12">
+-          {/* Left Column: Interactive Visual Tree Diagram */}
+-          <div className="panel p-5 lg:col-span-7 flex flex-col justify-between">
+-            <div>
+-              <div className="flex items-center justify-between">
+-                <div>
+-                  <h3 className="text-sm font-semibold text-slate-200">Merkle Tree Architecture</h3>
+-                  <p className="text-xs text-console-muted">Binary hash tree computed over manifest action identifiers</p>
+-                </div>
+-                <div className="flex items-center gap-3 text-[11px]">
+-                  <span className="flex items-center gap-1.5">
+-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 inline-block" /> Target Leaf
+-                  </span>
+-                  <span className="flex items-center gap-1.5">
+-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" /> Sibling Proof
+-                  </span>
+-                  <span className="flex items-center gap-1.5">
+-                    <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 inline-block" /> Root
+-                  </span>
+-                </div>
+-              </div>
+-
+-              {/* Clean SVG-Based Hierarchical Merkle Tree */}
+-              <div className="mt-5 rounded-xl border border-console-border bg-black/40 p-4">
+-                <svg viewBox="0 0 540 230" className="w-full h-auto">
+-                  {/* Connectors from Root (270, 42) to Branches (150, 115) and (390, 115) */}
+-                  <path d="M 270 45 C 270 80, 150 80, 150 105" fill="none" stroke="#475569" strokeWidth="2" />
+-                  <path d="M 270 45 C 270 80, 390 80, 390 105" fill="none" stroke="#475569" strokeWidth="2" />
+-
+-                  {/* Connectors from Branches to Leaves */}
+-                  <path d="M 150 135 C 150 155, 90 160, 90 175" fill="none" stroke="#475569" strokeWidth="1.5" />
+-                  <path d="M 150 135 C 150 155, 220 160, 220 175" fill="none" stroke="#475569" strokeWidth="1.5" />
+-                  <path d="M 390 135 C 390 155, 450 160, 450 175" fill="none" stroke="#475569" strokeWidth="1.5" />
+-
+-                  {/* Root Node Box */}
+-                  <g transform="translate(180, 10)">
+-                    <rect width="180" height="38" rx="6" fill="#083344" stroke="#06b6d4" strokeWidth="1.5" />
+-                    <text x="90" y="16" textAnchor="middle" fill="#22d3ee" fontSize="9" fontWeight="bold" letterSpacing="0.5">
+-                      ON-CHAIN ACTIONSROOT
+-                    </text>
+-                    <text x="90" y="29" textAnchor="middle" fill="#e2e8f0" fontSize="10" fontFamily="monospace">
+-                      {tree.root.slice(0, 8)}…{tree.root.slice(-6)}
+-                    </text>
++        <div className="grid gap-14 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
++          {/* The tree */}
++          <Section title="The tree" meta={`${actions.length} leaves · ${proofList.length} sibling${proofList.length === 1 ? "" : "s"} needed`}>
++            <div className="mt-5 border border-line bg-card p-4">
++              <svg viewBox="0 0 540 230" className="h-auto w-full" role="img" aria-label="Merkle tree of allowed actions">
++                <g fill="none" stroke="#C9BDBC" strokeWidth="2">
++                  <path d="M 270 45 C 270 80, 150 80, 150 105" />
++                  <path d="M 270 45 C 270 80, 390 80, 390 105" />
++                  <path d="M 150 135 C 150 155, 90 160, 90 175" strokeWidth="1.5" />
++                  <path d="M 150 135 C 150 155, 270 160, 270 175" strokeWidth="1.5" />
++                  <path d="M 390 135 C 390 155, 450 160, 450 175" strokeWidth="1.5" />
++                </g>
++
++                <g transform="translate(180, 10)">
++                  <rect width="180" height="38" fill="#440A0E" />
++                  <text x="90" y="16" textAnchor="middle" fill="#ECD5D3" fontSize="9" fontWeight="600">ON-CHAIN ROOT</text>
++                  <text x="90" y="30" textAnchor="middle" fill="#fff" fontSize="10.5" fontFamily="IBM Plex Mono, monospace">
++                    {tree.root.slice(0, 8)}…{tree.root.slice(-6)}
++                  </text>
++                </g>
++
++                {[65, 305].map((x) => (
++                  <g key={x} transform={`translate(${x}, 105)`}>
++                    <rect width="170" height="30" fill="#FBFAF9" stroke="#DCD3D2" />
++                    <text x="85" y="13" textAnchor="middle" fill="#75676A" fontSize="9" fontWeight="600">Branch hash</text>
++                    <text x="85" y="24" textAnchor="middle" fill="#75676A" fontSize="8" fontFamily="IBM Plex Mono, monospace">keccak256(left, right)</text>
+                   </g>
++                ))}
+ 
+-                  {/* Intermediate Branch Left */}
+-                  <g transform="translate(65, 105)">
+-                    <rect width="170" height="30" rx="5" fill="#0f172a" stroke="#334155" strokeWidth="1" />
+-                    <text x="85" y="15" textAnchor="middle" fill="#94a3b8" fontSize="8">
+-                      Internal Branch Hash
+-                    </text>
+-                    <text x="85" y="24" textAnchor="middle" fill="#64748b" fontSize="7.5" fontFamily="monospace">
+-                      keccak256(Left || Right)
+-                    </text>
+-                  </g>
+-
+-                  {/* Intermediate Branch Right */}
+-                  <g transform="translate(305, 105)">
+-                    <rect width="170" height="30" rx="5" fill="#0f172a" stroke="#334155" strokeWidth="1" />
+-                    <text x="85" y="15" textAnchor="middle" fill="#94a3b8" fontSize="8">
+-                      Internal Branch Hash
+-                    </text>
+-                    <text x="85" y="24" textAnchor="middle" fill="#64748b" fontSize="7.5" fontFamily="monospace">
+-                      keccak256(Left || Right)
+-                    </text>
+-                  </g>
+-
+-                  {/* Leaf Nodes */}
+-                  {treeNodes.slice(0, 3).map((node, i) => {
+-                    const xPositions = [10, 140, 370];
+-                    const x = xPositions[i] ?? 10 + i * 160;
+-                    const isSelected = node.name === activeActionName;
+-                    const isSibling = proofSet.has(node.hash.toLowerCase());
+-
+-                    let strokeColor = "#334155";
+-                    let fillColor = "#0f172a";
+-                    let tagText = "";
+-                    let tagFill = "";
+-
+-                    if (isSelected) {
+-                      strokeColor = "#10b981";
+-                      fillColor = "#064e3b";
+-                      tagText = "TARGET";
+-                      tagFill = "#34d399";
+-                    } else if (isSibling) {
+-                      strokeColor = "#f59e0b";
+-                      fillColor = "#451a03";
+-                      tagText = "SIBLING";
+-                      tagFill = "#fbbf24";
+-                    }
+-
+-                    return (
+-                      <g key={node.name} transform={`translate(${x}, 175)`} className="cursor-pointer">
+-                        <rect width="160" height="46" rx="5" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
+-                        <text x="10" y="16" fill="#f8fafc" fontSize="10" fontWeight="bold">
+-                          {node.name}
+-                        </text>
+-                        {tagText && (
+-                          <text x="150" y="15" textAnchor="end" fill={tagFill} fontSize="8" fontWeight="bold">
+-                            {tagText}
+-                          </text>
+-                        )}
+-                        <text x="10" y="29" fill="#94a3b8" fontSize="8" fontFamily="monospace">
+-                          ID: {node.actionId.slice(0, 10)}…
+-                        </text>
+-                        <text x="10" y="39" fill="#64748b" fontSize="7.5" fontFamily="monospace">
+-                          Leaf: {node.hash.slice(0, 12)}…
+-                        </text>
+-                      </g>
+-                    );
+-                  })}
+-                </svg>
++                {treeNodes.slice(0, 3).map((node, i) => {
++                  const x = [10, 190, 370][i] ?? 10 + i * 180;
++                  const isSelected = node.name === activeActionName;
++                  const isSibling = proofSet.has(node.hash.toLowerCase());
++                  const fill = isSelected ? "#E1EEE7" : isSibling ? "#F7EBD6" : "#FBFAF9";
++                  const stroke = isSelected ? "#2C5A45" : isSibling ? "#9A5B0C" : "#DCD3D2";
++                  const tag = isSelected ? "TARGET" : isSibling ? "SIBLING" : "";
++                  return (
++                    <g key={node.name} transform={`translate(${x}, 175)`}>
++                      <rect width="160" height="46" fill={fill} stroke={stroke} strokeWidth={isSelected || isSibling ? 2 : 1} />
++                      <text x="10" y="17" fill="#1E1517" fontSize="10.5" fontWeight="600" fontFamily="IBM Plex Mono, monospace">{node.name}</text>
++                      {tag && <text x="150" y="16" textAnchor="end" fill={stroke} fontSize="8.5" fontWeight="700">{tag}</text>}
++                      <text x="10" y="31" fill="#75676A" fontSize="8" fontFamily="IBM Plex Mono, monospace">id {node.actionId.slice(0, 12)}…</text>
++                      <text x="10" y="41" fill="#75676A" fontSize="8" fontFamily="IBM Plex Mono, monospace">leaf {node.hash.slice(0, 12)}…</text>
++                    </g>
++                  );
++                })}
++              </svg>
++              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-mute">
++                <span><i className="mr-1.5 inline-block h-2.5 w-2.5 bg-ok align-middle" />Action being proven</span>
++                <span><i className="mr-1.5 inline-block h-2.5 w-2.5 bg-warn align-middle" />Sibling hash in the proof</span>
++                <span><i className="mr-1.5 inline-block h-2.5 w-2.5 bg-ox-700 align-middle" />Root stored on-chain</span>
+               </div>
+             </div>
+ 
+-            {/* Cryptographic Formula Breakdown */}
+-            <div className="mt-4 rounded-lg border border-console-border bg-black/20 p-3 text-xs">
+-              <div className="font-semibold text-slate-300">Mathematical leaf computation:</div>
+-              <div className="mt-1 font-mono text-[11px] text-emerald-400 break-all">
+-                1. a_i = keccak256(UTF8("{activeActionName}"))
+-              </div>
+-              <div className="font-mono text-[11px] text-emerald-400 break-all">
+-                2. Leaf = keccak256(keccak256(abi.encode(a_i)))
+-              </div>
+-              <div className="font-mono text-[11px] text-emerald-400 break-all">
+-                3. Parent = keccak256(min(Node_A, Node_B) || max(Node_A, Node_B))
+-              </div>
+-            </div>
+-          </div>
+-
+-          {/* Right Column: Step-by-Step On-Chain Verification & Sibling Proofs */}
+-          <div className="space-y-4 lg:col-span-5 min-w-0">
+-            {/* Proof Path Breakdown Panel */}
+-            <div className="panel p-5 min-w-0">
+-              <div className="flex items-center justify-between gap-2">
+-                <h3 className="text-sm font-semibold text-slate-200">On-Chain Verification Trace</h3>
+-                <span
+-                  className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${
+-                    verificationResult?.valid
+-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+-                      : "bg-red-500/20 text-red-300 border border-red-500/40"
+-                  }`}
+-                >
+-                  {verificationResult?.valid ? "✅ PROOF VALID (AUTHORIZED)" : "❌ PROOF INVALID (REVERTED)"}
+-                </span>
+-              </div>
+-
+-              <p className="mt-1 text-xs text-console-muted">
+-                Simulating OpenZeppelin <code className="text-slate-300">MerkleProof.verify(proof, root, leaf)</code>
+-              </p>
+-
+-              {/* Step by Step Breakdown */}
+-              <div className="mt-4 space-y-3 min-w-0">
+-                {/* Step 1: Leaf Hash */}
+-                <div className="rounded border border-console-border bg-slate-900/70 p-3 text-xs min-w-0">
+-                  <div className="flex items-center justify-between font-semibold text-slate-300">
+-                    <span>Step 1: Compute Target Leaf Hash</span>
+-                    <span className="font-mono text-[10px] text-emerald-400">keccak256</span>
+-                  </div>
+-                  <div className="mt-1 font-mono text-[11px] break-all text-slate-400">
+-                    Action: <span className="text-slate-200 font-bold">"{activeActionName}"</span>
+-                  </div>
+-                  <div className="mt-1 font-mono text-[10px] break-all text-emerald-300/90 leading-relaxed">
+-                    Leaf: {leafData?.leafHash ?? "—"}
+-                  </div>
++            <details className="group mt-6 border-t border-line pt-4">
++              <summary className="cursor-pointer text-sm font-semibold text-ox-600">How each hash is computed</summary>
++              <ol className="mt-3 space-y-1.5 break-all font-mono text-xs leading-relaxed text-mute">
++                <li>action id = keccak256("{activeActionName}")</li>
++                <li>leaf = keccak256(keccak256(abi.encode(action id)))</li>
++                <li>parent = keccak256(min(a, b) ‖ max(a, b))</li>
++              </ol>
++            </details>
++          </Section>
++
++          {/* The check */}
++          <Section title="Verification" meta={<span className={valid ? "font-semibold text-ok" : "font-semibold text-bad"}>{valid ? "Authorized" : "Rejected"}</span>}>
++            <ol className="mt-5 space-y-6">
++              <li className="flex gap-4">
++                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center bg-ox-600 text-xs font-bold text-white">1</span>
++                <div className="min-w-0">
++                  <p className="font-semibold">Hash the action</p>
++                  <p className="text-sm text-mute">"{activeActionName}" becomes a leaf.</p>
++                  <p className="mt-1.5 break-all font-mono text-xs">{leafData?.leafHash ?? "—"}</p>
+                 </div>
+-
+-                {/* Step 2: Sibling Proof Path */}
+-                <div className="rounded border border-console-border bg-slate-900/70 p-3 text-xs min-w-0">
+-                  <div className="flex items-center justify-between font-semibold text-slate-300">
+-                    <span>Step 2: Fold Sibling Proof Path</span>
+-                    <span className="font-mono text-[10px] text-amber-400">{proofList.length} sibling(s)</span>
+-                  </div>
++              </li>
++              <li className="flex gap-4">
++                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center bg-ox-600 text-xs font-bold text-white">2</span>
++                <div className="min-w-0 flex-1">
++                  <p className="font-semibold">Fold in the sibling hashes</p>
+                   {proofList.length === 0 ? (
+-                    <div className="mt-2 text-xs text-red-300 font-mono">
+-                      No sibling proofs available. Action not present in tree.
+-                    </div>
++                    <p className="text-sm text-bad">No proof exists. This action is not in the tree.</p>
+                   ) : (
+-                    <div className="mt-2 space-y-1.5">
++                    <ul className="mt-2 space-y-1.5">
+                       {proofList.map((sib, i) => (
+-                        <div
+-                          key={sib}
+-                          className="flex flex-col gap-0.5 rounded bg-amber-500/10 p-2 font-mono text-[10px] text-amber-200 border border-amber-500/30"
+-                        >
+-                          <span className="font-bold text-amber-300">Sibling #{i + 1}</span>
+-                          <span className="break-all text-amber-100/90 leading-tight">{sib}</span>
+-                        </div>
++                        <li key={sib} className="flex items-baseline gap-3 bg-[#F7EBD6] px-3 py-1.5">
++                          <span className="text-xs font-semibold text-warn">#{i + 1}</span>
++                          <CopyHash value={sib} className="break-all border-transparent text-left" />
++                        </li>
+                       ))}
+-                    </div>
++                    </ul>
+                   )}
+                 </div>
+-
+-                {/* Step 3: Root Comparison */}
+-                <div
+-                  className={`rounded border p-3 text-xs min-w-0 ${
+-                    verificationResult?.valid
+-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+-                      : "border-red-500/40 bg-red-500/10 text-red-200"
+-                  }`}
+-                >
+-                  <div className="font-semibold text-slate-200">
+-                    Step 3: Root Equality Check
+-                  </div>
+-                  <div className="mt-2 font-mono text-[10px] space-y-2 min-w-0">
+-                    <div className="rounded bg-black/30 p-2 border border-console-border min-w-0">
+-                      <div className="text-[9px] uppercase text-console-muted">Computed Root</div>
+-                      <div className="mt-0.5 break-all text-slate-200 leading-tight">
+-                        {verificationResult?.valid ? tree.root : "0x0000000000000000000000000000000000000000000000000000000000000000"}
+-                      </div>
++              </li>
++              <li className="flex gap-4">
++                <span className={clsx("mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-xs font-bold text-white", valid ? "bg-ok" : "bg-bad")}>3</span>
++                <div className="min-w-0 flex-1">
++                  <p className="font-semibold">Compare with the on-chain root</p>
++                  <dl className="mt-2 space-y-2 text-xs">
++                    <div>
++                      <dt className="text-mute">Computed</dt>
++                      <dd className="break-all font-mono">{valid ? tree.root : "0x" + "0".repeat(64)}</dd>
+                     </div>
+-                    <div className="rounded bg-black/30 p-2 border border-console-border min-w-0">
+-                      <div className="text-[9px] uppercase text-console-muted">Expected Root (On-Chain)</div>
+-                      <div className="mt-0.5 break-all text-cyan-300 leading-tight">
+-                        {tree.root}
+-                      </div>
++                    <div>
++                      <dt className="text-mute">Stored in the contract</dt>
++                      <dd className="break-all font-mono">{tree.root}</dd>
+                     </div>
+-                  </div>
+-                  {verificationResult?.error && (
+-                    <div className="mt-2 rounded bg-red-950/80 p-2 text-[11px] text-red-200 border border-red-800 break-words">
+-                      {verificationResult.error}
+-                    </div>
+-                  )}
++                  </dl>
++                  <p className={clsx("mt-3 text-sm font-semibold", valid ? "text-ok" : "text-bad")}>
++                    {valid ? "They match. The action is authorized." : "They differ. The contract would revert this call."}
++                  </p>
++                  {verificationResult?.error && <div className="mt-2"><Notice tone="bad">{verificationResult.error}</Notice></div>}
+                 </div>
+-              </div>
+-            </div>
+-
+-            {/* Academic Viva Context */}
+-            <div className="panel p-4 text-xs text-console-muted">
+-              <h4 className="font-semibold text-slate-300">Why Merkle Trees for Agent Sandboxing?</h4>
+-              <ul className="mt-2 list-disc space-y-1 pl-4">
+-                <li>
+-                  <strong className="text-slate-300">Constant Storage Cost (O(1)):</strong> Storing a single 32-byte root allows thousands of permissioned actions without bloat.
+-                </li>
+-                <li>
+-                  <strong className="text-slate-300">Sublinear Verification (O(log N)):</strong> Inclusion is proven on-chain with minimal gas.
+-                </li>
+-                <li>
+-                  <strong className="text-slate-300">Least Privilege:</strong> Unlisted actions like prompt-injected fund drains fail proof validation instantly at the gateway or contract.
+-                </li>
+-              </ul>
+-            </div>
+-          </div>
++              </li>
++            </ol>
++          </Section>
+         </div>
+       )}
++
++      <details className="border-t border-line pt-5">
++        <summary className="cursor-pointer text-sm font-semibold text-ox-600">Why use a Merkle tree for this?</summary>
++        <ul className="mt-3 max-w-[70ch] list-disc space-y-2 pl-5 text-sm leading-relaxed text-mute">
++          <li><b className="text-ink">Constant storage.</b> One 32-byte root covers any number of actions.</li>
++          <li><b className="text-ink">Cheap checks.</b> A proof needs about log₂ N hashes, so on-chain verification stays inexpensive.</li>
++          <li><b className="text-ink">Least privilege.</b> An action that was never listed, such as a prompt-injected fund drain, has no valid proof and fails.</li>
++        </ul>
++      </details>
+     </div>
+   );
+ }
+diff --git a/web/src/pages/RedTeam.tsx b/web/src/pages/RedTeam.tsx
+index b33bb35..b596a32 100644
+--- a/web/src/pages/RedTeam.tsx
++++ b/web/src/pages/RedTeam.tsx
+@@ -2,20 +2,23 @@ import { useMutation, useQuery } from "@tanstack/react-query";
+ import { useEffect, useState } from "react";
+ import { fetchScenarios, runScenario } from "../lib/api";
+ import { AGENT_API } from "../lib/constants";
++import { Empty, Notice, PageHeader, Section } from "../components/ui";
++import clsx from "clsx";
+ 
+-const SCENARIO_LABELS: Record<string, string> = {
+-  normal_day: "Normal day",
+-  prompt_injection: "Prompt injection",
+-  over_cap: "Exceed cap",
+-  unlisted_action: "Unlisted action",
+-  replay_signature: "Replay signature",
+-  rate_limit_burst: "Rate limit burst",
++const SCENARIOS: Record<string, { label: string; what: string }> = {
++  normal_day: { label: "Normal day", what: "Routine allowed actions. Everything should pass." },
++  prompt_injection: { label: "Prompt injection", what: "A hidden instruction tries to redirect the agent." },
++  over_cap: { label: "Exceed cap", what: "Asks to move more than the per-call limit." },
++  unlisted_action: { label: "Unlisted action", what: "Calls an action that is not on the grant." },
++  replay_signature: { label: "Replay signature", what: "Resends an already-used signed request." },
++  rate_limit_burst: { label: "Rate limit burst", what: "Fires many calls to exhaust the window." },
+ };
+ 
+ export function RedTeamPage() {
+   const [grantId, setGrantId] = useState(1);
+   const [thoughts, setThoughts] = useState<{ text: string; at: string }[]>([]);
+   const [lastResult, setLastResult] = useState<unknown>(null);
++  const [running, setRunning] = useState<string | null>(null);
+ 
+   const scenariosQ = useQuery({ queryKey: ["scenarios"], queryFn: fetchScenarios });
+ 
+@@ -33,62 +36,80 @@ export function RedTeamPage() {
+   }, []);
+ 
+   const run = useMutation({
+-    mutationFn: (scenario: string) => runScenario(scenario, grantId),
++    mutationFn: (scenario: string) => {
++      setRunning(scenario);
++      return runScenario(scenario, grantId);
++    },
+     onSuccess: setLastResult,
++    onSettled: () => setRunning(null),
+   });
+ 
+-  const list = scenariosQ.data?.scenarios ?? Object.keys(SCENARIO_LABELS);
++  const list = scenariosQ.data?.scenarios ?? Object.keys(SCENARIOS);
+ 
+   return (
+-    <div className="space-y-6">
+-      <div>
+-        <h2 className="text-xl font-semibold">Red team console</h2>
+-        <p className="text-sm text-console-muted">Runs real scenarios via the Python agent → gateway → contract</p>
+-      </div>
+-
+-      <label className="flex items-center gap-2 text-sm">
+-        Grant ID
+-        <input className="input w-24" type="number" value={grantId} onChange={(e) => setGrantId(Number(e.target.value))} />
+-      </label>
+-
+-      <div className="grid gap-6 lg:grid-cols-3">
+-        <div className="panel space-y-2 p-4">
+-          <h3 className="text-sm font-medium text-console-muted">Attacks</h3>
+-          {list.map((s) => (
+-            <button
+-              key={s}
+-              type="button"
+-              className="btn-ghost w-full text-left"
+-              disabled={run.isPending}
+-              onClick={() => run.mutate(s)}
+-            >
+-              {SCENARIO_LABELS[s] ?? s}
+-            </button>
+-          ))}
+-        </div>
++    <div className="space-y-10">
++      <PageHeader
++        title="Red team"
++        lead="Launch a real attack from the Python agent and watch the gateway and contract respond. Results also appear in the audit log."
++        actions={
++          <label className="flex items-center gap-2 text-sm font-semibold">
++            Target grant
++            <input className="input w-20 text-center" type="number" min={1} value={grantId} onChange={(e) => setGrantId(Number(e.target.value))} />
++          </label>
++        }
++      />
+ 
+-        <div className="panel max-h-[420px] overflow-y-auto p-4 lg:col-span-1">
+-          <h3 className="mb-2 text-sm font-medium text-console-muted">Agent thoughts</h3>
+-          <ul className="space-y-2 text-sm">
+-            {thoughts.length === 0 && <li className="text-console-muted">Run a scenario…</li>}
+-            {thoughts.map((t, i) => (
+-              <li key={i} className="rounded-lg bg-console-bg/80 px-3 py-2">
+-                {t.text}
++      <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
++        <Section title="Attacks" meta={`${list.length} scenarios`}>
++          <ul className="divide-y divide-line">
++            {list.map((s) => (
++              <li key={s}>
++                <button
++                  type="button"
++                  disabled={run.isPending}
++                  onClick={() => run.mutate(s)}
++                  className={clsx("group flex w-full items-center justify-between gap-4 py-4 text-left transition-colors disabled:cursor-not-allowed", running === s ? "text-ox-600" : "hover:text-ox-600")}
++                >
++                  <span>
++                    <span className="block font-semibold">{SCENARIOS[s]?.label ?? s}</span>
++                    <span className="block text-sm font-normal text-mute">{SCENARIOS[s]?.what ?? "Custom scenario."}</span>
++                  </span>
++                  <span className={clsx("shrink-0 border px-3 py-1 text-xs font-semibold", running === s ? "border-ox-600 bg-ox-600 text-white" : "border-line text-mute group-hover:border-ox-500 group-hover:text-ox-600")}>
++                    {running === s ? "Running…" : "Run"}
++                  </span>
++                </button>
+               </li>
+             ))}
+           </ul>
+-        </div>
++        </Section>
++
++        <div className="space-y-10">
++          <Section title="Agent thoughts" meta="live">
++            <div className="max-h-72 overflow-y-auto">
++              {thoughts.length === 0 ? (
++                <p className="py-6 text-sm text-mute">Run an attack to see what the agent is reasoning.</p>
++              ) : (
++                <ul className="divide-y divide-line">
++                  {thoughts.map((t, i) => (
++                    <li key={i} className="py-2.5 text-sm leading-relaxed">{t.text}</li>
++                  ))}
++                </ul>
++              )}
++            </div>
++          </Section>
+ 
+-        <div className="panel p-4 lg:col-span-1">
+-          <h3 className="mb-2 text-sm font-medium text-console-muted">Contract response</h3>
+-          {run.isError && <p className="text-sm text-red-400">{(run.error as Error).message}</p>}
+-          {lastResult ? (
+-            <pre className="max-h-80 overflow-auto rounded-lg bg-console-bg p-3 font-mono text-xs text-slate-300">
+-              {JSON.stringify(lastResult, null, 2)}
+-            </pre>
+-          ) : (
+-            <p className="text-sm text-console-muted">No run yet. Start agent on :8000.</p>
+-          )}
++          <Section title="Contract response">
++            {run.isError && <div className="mt-4"><Notice tone="bad">{(run.error as Error).message}</Notice></div>}
++            {lastResult ? (
++              <pre className="mt-4 max-h-80 overflow-auto bg-sunk p-4 font-mono text-xs leading-relaxed">{JSON.stringify(lastResult, null, 2)}</pre>
++            ) : (
++              !run.isError && (
++                <div className="mt-4">
++                  <Empty title="No run yet" hint="Pick an attack on the left. The agent service must be running on port 8000." />
++                </div>
++              )
++            )}
++          </Section>
+         </div>
+       </div>
+     </div>
+diff --git a/web/tailwind.config.js b/web/tailwind.config.js
+index 2af1540..8657756 100644
+--- a/web/tailwind.config.js
++++ b/web/tailwind.config.js
+@@ -4,21 +4,41 @@ export default {
+   theme: {
+     extend: {
+       fontFamily: {
+-        sans: ["Inter", "system-ui", "sans-serif"],
+-        mono: ["JetBrains Mono", "ui-monospace", "monospace"],
++        sans: ["Schibsted Grotesk", "system-ui", "sans-serif"],
++        mono: ["IBM Plex Mono", "ui-monospace", "monospace"],
+       },
+       colors: {
+-        console: {
+-          bg: "#0f1419",
+-          panel: "#1a2332",
+-          border: "#2d3a4f",
+-          muted: "#8b9cb3",
+-        },
+-        status: {
+-          ok: "#22c55e",
+-          warn: "#f59e0b",
+-          bad: "#ef4444",
++        // Surfaces
++        paper: "#F3F1F0",
++        card: "#FBFAF9",
++        sunk: "#EAE5E4",
++        line: "#DCD3D2",
++        // Text
++        ink: "#1E1517",
++        mute: "#75676A",
++        // Brand: oxblood, darkest to lightest
++        ox: {
++          50: "#F6EAE9",
++          100: "#ECD5D3",
++          300: "#B96A6D",
++          500: "#7A1A1F",
++          600: "#5A0E13",
++          700: "#440A0E",
++          800: "#33070A",
++          900: "#230507",
+         },
++        // Signals (kept distinct from the brand red so a denial never looks like a normal button)
++        ok: "#2C5A45",
++        warn: "#9A5B0C",
++        bad: "#C8202D",
++      },
++      keyframes: {
++        draw: { from: { transform: "scaleY(0)" }, to: { transform: "scaleY(1)" } },
++        enter: { from: { opacity: "0", transform: "translateY(-6px)" }, to: { opacity: "1", transform: "none" } },
++      },
++      animation: {
++        draw: "draw .9s ease-out both",
++        enter: "enter .35s ease-out both",
+       },
+     },
+   },

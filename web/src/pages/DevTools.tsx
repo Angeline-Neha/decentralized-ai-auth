@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { BlockChainView } from "../components/BlockChainView";
+import { Empty, Notice, PageHeader } from "../components/ui";
 import { INTEGRITY_KEY, useIntegrity } from "../hooks/useIntegrity";
 import { devDeleteBlock, devHealth, devRemine, devResetDemo, devRestoreAudit, devTamperAudit, runScenario, type TamperField } from "../lib/api";
 
@@ -63,117 +64,108 @@ export function DevToolsPage() {
   const busy = tamper.isPending || remine.isPending || del.isPending || restore.isPending;
   const firstBad = data?.blocks.find((b) => b.status !== "ok");
 
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-400">On-Chain Cryptographic Ledger</span>
-            <h2 className="text-xl font-bold tracking-tight text-slate-100">Audit blockchain</h2>
-          </div>
-          <p className="mt-1 text-sm text-console-muted">
-            Edit any block to tamper with it. Every page flags it, and the gateway refuses to add new blocks until the chain is restored.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className="btn-ghost text-xs" disabled={restore.isPending} onClick={() => restore.mutate()} title="Rebuild the off-chain copy from on-chain events">
-            {restore.isPending ? "Restoring…" : "🛡️ Restore from chain"}
-          </button>
-          <button type="button" className="btn-primary text-xs" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
-            {verify.isFetching ? "Verifying…" : "⚡ Re-verify"}
-          </button>
-          <button
-            type="button"
-            className="btn-danger text-xs"
-            disabled={reset.isPending}
-            onClick={() => confirm("Reset demo: deploy a fresh contract, wipe state, seed Grant #1?") && reset.mutate()}
-          >
-            {reset.isPending ? "Resetting…" : "🔄 Reset demo"}
-          </button>
-        </div>
-      </div>
+  const status = !data ? (
+    <span className="text-mute">Verifying…</span>
+  ) : data.blocks.length === 0 && data.valid ? (
+    <span className="text-mute">Genesis only</span>
+  ) : data.valid ? (
+    <span className="font-semibold text-ok">Valid · {data.blocks.length} blocks{data.lagging ? ", syncing" : ""}</span>
+  ) : (
+    <span className="animate-pulse font-semibold text-bad">Broken at block #{(data.brokenAt ?? 0) + 1}</span>
+  );
 
-      <div className="panel grid gap-4 p-4 text-xs sm:grid-cols-4">
+  return (
+    <div className="space-y-10">
+      <PageHeader
+        title="Audit chain"
+        lead="Every recorded action is a block linked to the one before it. Edit any block to see how tampering is caught, and why the chain refuses new blocks until it is restored."
+        actions={
+          <>
+            <button type="button" className="btn-ghost" disabled={restore.isPending} onClick={() => restore.mutate()} title="Rebuild the off-chain copy from on-chain events">
+              {restore.isPending ? "Restoring…" : "Restore from chain"}
+            </button>
+            <button type="button" className="btn-primary" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
+              {verify.isFetching ? "Verifying…" : "Re-verify"}
+            </button>
+            <button
+              type="button"
+              className="btn-danger"
+              disabled={reset.isPending}
+              onClick={() => confirm("Reset demo: deploy a fresh contract, wipe state, seed Grant #1?") && reset.mutate()}
+            >
+              {reset.isPending ? "Resetting…" : "Reset demo"}
+            </button>
+          </>
+        }
+      />
+
+      <dl className="grid gap-x-8 gap-y-5 border-y border-line py-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
         <div>
-          <div className="text-console-muted">RPC endpoint</div>
-          <div className="mt-1 font-mono font-semibold text-slate-200">{health.data?.rpcUrl ?? "…"}</div>
+          <dt className="text-xs text-mute">RPC endpoint</dt>
+          <dd className="mt-0.5 font-mono">{health.data?.rpcUrl ?? "…"}</dd>
         </div>
         <div className="min-w-0">
-          <div className="text-console-muted">Contract</div>
-          <div className="mt-1 truncate font-mono font-semibold text-emerald-300" title={health.data?.contract}>
-            {health.data?.contract ?? "Loading…"}
-          </div>
+          <dt className="text-xs text-mute">Contract</dt>
+          <dd className="mt-0.5 truncate font-mono" title={health.data?.contract}>{health.data?.contract ?? "Loading…"}</dd>
         </div>
         <div>
-          <div className="text-console-muted">Chain id / status</div>
-          <div className="mt-1 font-mono font-semibold text-slate-200">
-            {health.data?.chainId ?? "—"} • {health.data?.contractLive ? "🟢 live" : "🟡 offline"}
-          </div>
+          <dt className="text-xs text-mute">Chain id · status</dt>
+          <dd className="mt-0.5 font-mono">
+            {health.data?.chainId ?? "—"} · {health.data?.contractLive ? <span className="text-ok">live</span> : <span className="text-warn">offline</span>}
+          </dd>
         </div>
         <div>
-          <div className="text-console-muted">Hash-chain verification</div>
-          <div className="mt-1 font-mono font-semibold">
-            {!data ? (
-              <span className="text-slate-400">Verifying…</span>
-            ) : data.blocks.length === 0 && data.valid ? (
-              <span className="text-slate-400">Genesis only</span>
-            ) : data.valid ? (
-              <span className="text-emerald-400">✅ VALID ({data.blocks.length} blocks{data.lagging ? ", syncing" : ""})</span>
-            ) : (
-              <span className="animate-pulse font-bold text-red-400">🚨 BROKEN at Block #{(data.brokenAt ?? 0) + 1}</span>
-            )}
-          </div>
-          {data && !data.chainAvailable && <div className="mt-1 text-[10px] text-amber-300">On-chain record unreachable — checking hash links only.</div>}
+          <dt className="text-xs text-mute">Hash-chain check</dt>
+          <dd className="mt-0.5 font-mono">{status}</dd>
+          {data && !data.chainAvailable && <p className="mt-1 text-xs text-warn">On-chain record unreachable. Checking hash links only.</p>}
         </div>
-      </div>
+      </dl>
 
-      {error && <div className="rounded-lg border border-red-500/40 bg-red-950/40 p-3 text-xs text-red-200">{error}</div>}
+      {error && <Notice tone="bad">{error}</Notice>}
 
       {data && !data.valid && (
-        <div className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-xs text-red-200">
-          <div className="font-bold text-red-300">🚨 Tampering detected — {data.tamperedCount} block(s) failing verification</div>
-          <p className="mt-1 text-red-300/90">
-            {firstBad ? `Block #${firstBad.index + 1}: ${firstBad.reasons.join(" ")}` : data.missing.length ? "One or more blocks were deleted." : "The final hash differs from the contract's auditHead."}{" "}
-            <strong>Red</strong> = the block's content differs from the on-chain record. <strong>Amber</strong> = the block is intact, but the block before it changed, so its link
-            no longer verifies.
-          </p>
+        <Notice tone="bad">
+          <b>Tampering detected. {data.tamperedCount} block{data.tamperedCount === 1 ? "" : "s"} failing verification.</b>{" "}
+          {firstBad ? `Block #${firstBad.index + 1}: ${firstBad.reasons.join(" ")}` : data.missing.length ? "One or more blocks were deleted." : "The final hash differs from the contract's auditHead."}{" "}
+          Red means the block's content differs from the on-chain record. Amber means the block is intact but the one before it changed, so its link no longer verifies.
+        </Notice>
+      )}
+
+      <div>
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-ox-600">Blocks · scroll sideways</h2>
+          <p className="font-mono text-xs text-mute">H(i) = keccak256(H(i-1) ‖ grant ‖ action ‖ amount ‖ params ‖ code ‖ height)</p>
         </div>
-      )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-console-muted">Blockchain — scroll →</h3>
-        <span className="font-mono text-[11px] text-console-muted"># = covered by hash · H(i) = keccak256(H(i-1) ‖ grant ‖ action ‖ amount ‖ params ‖ code ‖ height)</span>
+        {data ? (
+          <BlockChainView
+            data={data}
+            busy={busy}
+            mining={mine.isPending}
+            mineNote={mineNote}
+            onTamper={(index, fields) => tamper.mutate({ index, fields })}
+            onRemine={(index, mode) => remine.mutate({ index, mode })}
+            onDelete={(index) => del.mutate(index)}
+            onMine={() => mine.mutate()}
+          />
+        ) : (
+          <Empty title="Loading chain…" />
+        )}
+        {data && data.blocks.length === 0 && (
+          <p className="mt-2 text-sm text-mute">No action blocks yet. Use “Mine next blocks” (needs the agent on port 8000).</p>
+        )}
       </div>
 
-      {data ? (
-        <BlockChainView
-          data={data}
-          busy={busy}
-          mining={mine.isPending}
-          mineNote={mineNote}
-          onTamper={(index, fields) => tamper.mutate({ index, fields })}
-          onRemine={(index, mode) => remine.mutate({ index, mode })}
-          onDelete={(index) => del.mutate(index)}
-          onMine={() => mine.mutate()}
-        />
-      ) : (
-        <div className="panel p-8 text-center text-sm text-console-muted">Loading chain…</div>
-      )}
-
-      {data && data.blocks.length === 0 && (
-        <p className="text-center text-xs text-console-muted">No action blocks yet — click “Mine next blocks” above (needs the agent on :8000) to append some.</p>
-      )}
-
-      <div className="panel space-y-2 p-4 text-xs text-console-muted">
-        <h4 className="font-semibold text-slate-200">Try it (viva walkthrough)</h4>
-        <ol className="list-decimal space-y-1 pl-5">
-          <li><strong className="text-slate-300">Tamper</strong> a block (e.g. change its amount) → that block turns red, the banner appears on every page, and the on-chain value is shown next to yours.</li>
-          <li>Click <strong className="text-slate-300">Mine next blocks</strong> → the gateway answers 423 and nothing is appended.</li>
-          <li><strong className="text-slate-300">Re-mine</strong> the block (attacker fixes its hash) → it looks consistent, but the <em>next</em> block's link breaks and it still differs from the chain.</li>
-          <li><strong className="text-slate-300">Re-mine all after</strong> → every local hash verifies, yet it is still caught because the contract's <code>auditHead</code> and events are the anchor.</li>
-          <li><strong className="text-slate-300">Restore from chain</strong> → rebuilt from on-chain events, banner clears, mining works again.</li>
+      <details className="border-t border-line pt-5">
+        <summary className="cursor-pointer text-sm font-semibold text-ox-600">Walk through a tamper demo</summary>
+        <ol className="mt-4 max-w-[72ch] list-decimal space-y-2.5 pl-5 text-sm leading-relaxed text-mute">
+          <li><b className="text-ink">Tamper</b> with a block (for example its amount). It turns red, a banner appears on every page, and the on-chain value is shown beside yours.</li>
+          <li>Click <b className="text-ink">Mine next blocks</b>. The gateway answers 423 and nothing is appended.</li>
+          <li><b className="text-ink">Re-mine</b> the block, as an attacker fixing its hash. It looks consistent, but the next block's link breaks and it still differs from the chain.</li>
+          <li><b className="text-ink">Re-mine all after</b>. Every local hash now verifies, yet it is still caught, because the contract's <code className="mono-chip">auditHead</code> and events are the anchor.</li>
+          <li><b className="text-ink">Restore from chain</b>. The copy is rebuilt from on-chain events, the banner clears, and mining works again.</li>
         </ol>
-      </div>
+      </details>
     </div>
   );
 }

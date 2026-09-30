@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { ReactFlow, Background, Controls, MiniMap, type Edge, type Node } from "@xyflow/react";
+import { ReactFlow, Background, Controls, type Edge, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { Link } from "react-router-dom";
 import { fetchGrants } from "../lib/api";
 import { ethFromWei, shortAddr, statusLabel } from "../lib/format";
+import { BudgetBar, Empty, PageHeader } from "../components/ui";
 
 export function DelegationTreePage() {
   const q = useQuery({ queryKey: ["grants"], queryFn: fetchGrants, refetchInterval: 3000 });
@@ -14,27 +16,24 @@ export function DelegationTreePage() {
     const edges: Edge[] = [];
     for (const g of grants) {
       const depth = g.depth ?? (g.parent_id ? 1 : 0);
-      const budgetPct =
-        g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 100n) / BigInt(g.total_budget));
+      const budgetPct = g.total_budget === "0" ? 0 : Number((BigInt(g.spent) * 10000n) / BigInt(g.total_budget)) / 100;
       nodes.push({
         id: String(g.id),
-        position: { x: 40 + depth * 240, y: 40 + g.id * 90 },
+        position: { x: 40 + depth * 260, y: 40 + g.id * 110 },
         data: {
           label: (
-            <div className="rounded-lg border border-console-border bg-console-panel px-3 py-2 text-left text-xs shadow-lg">
-              <div className="font-semibold text-emerald-300">Grant #{g.id}</div>
-              <div className="text-console-muted">Agent {shortAddr(g.agent)}</div>
-              <div>{statusLabel(g.status)}</div>
-              <div className="mt-1 h-1.5 w-32 overflow-hidden rounded bg-console-bg">
-                <div className="h-full bg-emerald-500" style={{ width: `${Math.min(budgetPct, 100)}%` }} />
+            <div className="border border-line border-l-4 border-l-ox-600 bg-card px-3 py-2.5 text-left">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-semibold text-ink">Grant #{g.id}</span>
+                <span className="text-[11px] text-mute">{statusLabel(g.status)}</span>
               </div>
-              <div className="font-mono text-[10px]">
-                {ethFromWei(g.spent)} / {ethFromWei(g.total_budget)} ETH
-              </div>
+              <div className="mt-0.5 font-mono text-[11px] text-mute">{shortAddr(g.agent)}</div>
+              <div className="mt-2"><BudgetBar pct={budgetPct} /></div>
+              <div className="mt-1 font-mono text-[11px] text-mute">{ethFromWei(g.spent)} / {ethFromWei(g.total_budget)} ETH</div>
             </div>
           ),
         },
-        style: { width: 180, border: "none", background: "transparent" },
+        style: { width: 200, border: "none", background: "transparent", padding: 0 },
       });
       if (g.parent_id && g.parent_id > 0) {
         edges.push({
@@ -42,29 +41,33 @@ export function DelegationTreePage() {
           source: String(g.parent_id),
           target: String(g.id),
           animated: true,
-          style: { stroke: "#22c55e88" },
+          style: { stroke: "#5A0E13", strokeWidth: 1.5 },
         });
       }
     }
     return { nodes, edges };
   }, [grants]);
 
+  const hasChildren = grants.some((g) => g.parent_id && g.parent_id > 0);
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold">Delegation tree</h2>
-        <p className="text-sm text-console-muted">Child grants must be narrower than their parent (child ⊆ parent)</p>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Delegation"
+        lead="A grant can hand part of its authority to another agent, but never more than it holds itself. Arrows point from parent to child."
+      />
       {grants.length === 0 ? (
-        <p className="text-console-muted">No grants indexed yet.</p>
+        <Empty title="No grants yet" hint="Delegated grants appear here once at least one grant exists." action={<Link to="/create" className="btn-primary">Create a grant</Link>} />
       ) : (
-        <div className="panel h-[520px] overflow-hidden">
-          <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }}>
-            <Background color="#2d3a4f" gap={16} />
-            <Controls />
-            <MiniMap nodeColor="#22c55e" maskColor="#0f141980" />
-          </ReactFlow>
-        </div>
+        <>
+          <div className="h-[520px] overflow-hidden border border-line bg-card">
+            <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }} nodesConnectable={false}>
+              <Background color="#DCD3D2" gap={20} />
+              <Controls showInteractive={false} />
+            </ReactFlow>
+          </div>
+          {!hasChildren && <p className="text-sm text-mute">No delegated grants yet. Every grant here is a root grant.</p>}
+        </>
       )}
     </div>
   );

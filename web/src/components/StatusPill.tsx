@@ -4,11 +4,11 @@ export function StatusPill({ label, tone }: { label: string; tone: "ok" | "warn"
   return (
     <span
       className={clsx(
-        "inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium",
-        tone === "ok" && "bg-emerald-500/20 text-emerald-300",
-        tone === "warn" && "bg-amber-500/20 text-amber-200",
-        tone === "bad" && "bg-red-500/20 text-red-300",
-        tone === "neutral" && "bg-slate-500/20 text-slate-300",
+        "inline-flex items-center px-2 py-0.5 text-xs font-semibold",
+        tone === "ok" && "bg-[#E1EEE7] text-ok",
+        tone === "warn" && "bg-[#F7EBD6] text-warn",
+        tone === "bad" && "bg-bad text-white",
+        tone === "neutral" && "bg-sunk text-mute",
       )}
     >
       {label}

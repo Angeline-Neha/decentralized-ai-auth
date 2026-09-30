@@ -18,27 +18,19 @@ export function IntegrityBanner() {
   const n = data.brokenAt === null ? "?" : data.brokenAt + 1;
 
   return (
-    <div className="border-b border-red-500/50 bg-red-950/70 px-4 py-2 text-xs text-red-100">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
-        <ShieldAlert className="h-4 w-4 shrink-0 text-red-300" />
-        <div className="min-w-0 flex-1">
-          <span className="font-semibold text-red-200">Audit chain tampered — Block #{n}</span>
-          <span className="text-red-200/80">
-            {" "}
-            · {data.tamperedCount} block{data.tamperedCount === 1 ? "" : "s"} failing
-            {data.missing.length > 0 && ` · block${data.missing.length > 1 ? "s" : ""} ${data.missing.map((m) => m + 1).join(", ")} deleted`}
-            {first?.reasons[0] && ` · ${first.reasons[0]}`} New blocks are refused until it is restored.
-          </span>
-        </div>
-        <Link to="/dev" className="rounded border border-red-400/40 px-2 py-1 font-semibold hover:bg-red-500/20">
+    <div role="alert" className="bg-bad px-6 py-3 text-sm text-white">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <ShieldAlert className="h-5 w-5 shrink-0" />
+        <p className="min-w-0 flex-1">
+          <strong>Audit chain tampered at block #{n}.</strong>{" "}
+          {data.tamperedCount} block{data.tamperedCount === 1 ? "" : "s"} no longer match the on-chain record
+          {data.missing.length > 0 && `, and block${data.missing.length > 1 ? "s" : ""} ${data.missing.map((m) => m + 1).join(", ")} ${data.missing.length > 1 ? "were" : "was"} deleted`}.
+          {first?.reasons[0] && ` ${first.reasons[0]}`} New blocks are refused until it is restored.
+        </p>
+        <Link to="/dev" className="border border-white/60 px-3 py-1 font-semibold hover:bg-white/15">
           Inspect chain
         </Link>
-        <button
-          type="button"
-          className="rounded border border-red-400/40 bg-red-500/20 px-2 py-1 font-semibold hover:bg-red-500/40 disabled:opacity-50"
-          disabled={restore.isPending}
-          onClick={() => restore.mutate()}
-        >
+        <button type="button" className="bg-white px-3 py-1 font-semibold text-bad hover:bg-red-50 disabled:opacity-60" disabled={restore.isPending} onClick={() => restore.mutate()}>
           {restore.isPending ? "Restoring…" : "Restore from chain"}
         </button>
       </div>

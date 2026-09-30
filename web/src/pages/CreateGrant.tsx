@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { postManifest } from "../lib/api";
 import { DEFAULT_ACTIONS, DEMO_AGENT } from "../lib/constants";
 import { useWallet } from "../lib/wallet";
+import clsx from "clsx";
+import { Field, Notice, PageHeader } from "../components/ui";
 
 const ALL_ACTIONS = [...DEFAULT_ACTIONS, "transfer_funds"];
 
@@ -59,92 +61,113 @@ export function CreateGrantPage() {
     }
   }
 
+  const STEPS = [
+    { name: "Agent", help: "Who receives the permission" },
+    { name: "Actions", help: "What they may do" },
+    { name: "Limits", help: "How much they may spend" },
+    { name: "Review", help: "Sign and create" },
+  ];
+  const LIMITS: Array<[string, string, (v: string) => void, string]> = [
+    ["Per-call cap (ETH)", perCall, setPerCall, "Largest amount a single call may move."],
+    ["Total budget (ETH)", budget, setBudget, "Most the agent may spend across all calls."],
+    ["Escrow (ETH)", escrow, setEscrow, "Funds locked in the contract to cover spending."],
+    ["Approval threshold (ETH)", approval, setApproval, "Calls above this wait for your co-sign."],
+  ];
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Create grant</h2>
-        <p className="text-sm text-console-muted">On-chain policy + Merkle action whitelist</p>
-      </div>
+    <div className="mx-auto max-w-2xl space-y-8">
+      <PageHeader title="Create a grant" lead="Decide what one agent may do and how much it may spend. The rules are written to the contract and cannot be widened by the agent." />
 
-      {!chainOk && address && <p className="text-sm text-amber-300">Please switch MetaMask network to RPC http://127.0.0.1:7545 (Chain ID 1337) before signing.</p>}
+      {!chainOk && address && <Notice tone="warn">Switch MetaMask to RPC http://127.0.0.1:7545 (chain ID 1337) before signing.</Notice>}
 
-      <div className="flex gap-2 text-xs">
-        {["Agent", "Actions", "Limits", "Sign"].map((l, i) => (
-          <span key={l} className={i === step ? "text-emerald-400" : "text-console-muted"}>
-            {i + 1}. {l}
-          </span>
+      <ol className="grid grid-cols-4 gap-2" aria-label="Progress">
+        {STEPS.map((st, i) => (
+          <li key={st.name}>
+            <button
+              type="button"
+              disabled={i > step}
+              onClick={() => setStep(i)}
+              className={clsx("w-full border-t-4 pt-2 text-left", i === step ? "border-ox-600" : i < step ? "border-ox-300" : "border-line", i > step && "cursor-default")}
+            >
+              <span className={clsx("block text-sm font-semibold", i === step ? "text-ox-600" : "text-mute")}>{i + 1}. {st.name}</span>
+              <span className="hidden text-xs text-mute sm:block">{st.help}</span>
+            </button>
+          </li>
         ))}
-      </div>
+      </ol>
 
-      <div className="panel space-y-4 p-6">
+      <div className="sheet space-y-5">
         {step === 0 && (
           <>
-            <label className="block text-sm text-console-muted">Agent address</label>
-            <input className="input" value={agent} onChange={(e) => setAgent(e.target.value)} />
-            <button type="button" className="btn-ghost text-xs" onClick={() => setAgent(DEMO_AGENT)}>
-              Use demo agent (Hardhat #1)
+            <Field label="Agent address" hint="The wallet the agent signs with.">
+              <input className="input" value={agent} onChange={(e) => setAgent(e.target.value)} spellCheck={false} />
+            </Field>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setAgent(DEMO_AGENT)}>
+              Use the demo agent
             </button>
           </>
         )}
+
         {step === 1 && (
           <>
-            <p className="text-sm text-console-muted">Toggle permitted actions</p>
-            <div className="flex flex-wrap gap-2">
-              {ALL_ACTIONS.map((a) => {
-                const on = actions.includes(a);
-                return (
-                  <button
-                    key={a}
-                    type="button"
-                    className={`rounded-full px-3 py-1 text-sm font-mono ${on ? "bg-emerald-600/30 text-emerald-200 ring-1 ring-emerald-500/50" : "bg-console-bg text-console-muted ring-1 ring-console-border"}`}
-                    onClick={() =>
-                      setActions((prev) => (on ? prev.filter((x) => x !== a) : [...prev, a]))
-                    }
-                  >
-                    {a}
-                  </button>
-                );
-              })}
+            <div>
+              <span className="field-label">Permitted actions</span>
+              <p className="field-hint mb-3 mt-0">Anything not selected is refused, even if the agent is tricked into asking.</p>
+              <div className="flex flex-wrap gap-2">
+                {ALL_ACTIONS.map((a) => {
+                  const on = actions.includes(a);
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      aria-pressed={on}
+                      className={clsx("border px-3 py-1.5 font-mono text-sm transition-colors", on ? "border-ox-600 bg-ox-600 text-white" : "border-line bg-card text-mute hover:border-ox-500 hover:text-ox-600")}
+                      onClick={() => setActions((prev) => (on ? prev.filter((x) => x !== a) : [...prev, a]))}
+                    >
+                      {on ? "✓ " : ""}{a}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div>
-              <div className="text-xs text-console-muted">Merkle root (live)</div>
-              <div className="mt-1 break-all font-mono text-xs text-emerald-300">{tree.root}</div>
+              <span className="field-label">Merkle root</span>
+              <p className="break-all bg-sunk px-3 py-2 font-mono text-xs">{tree.root}</p>
+              <p className="field-hint">This one hash stands for the whole list and is what the contract stores.</p>
             </div>
           </>
         )}
+
         {step === 2 && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {[
-              ["Per-call cap (ETH)", perCall, setPerCall],
-              ["Total budget (ETH)", budget, setBudget],
-              ["Escrow (ETH)", escrow, setEscrow],
-              ["Approval threshold (ETH)", approval, setApproval],
-            ].map(([label, val, set]) => (
-              <label key={label as string} className="block text-sm">
-                <span className="text-console-muted">{label as string}</span>
-                <input className="input mt-1" value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} />
-              </label>
+          <div className="grid gap-5 sm:grid-cols-2">
+            {LIMITS.map(([label, val, set, hint]) => (
+              <Field key={label} label={label} hint={hint}>
+                <input className="input" inputMode="decimal" value={val} onChange={(e) => set(e.target.value)} />
+              </Field>
             ))}
           </div>
         )}
+
         {step === 3 && (
           <>
-            <p className="rounded-lg bg-console-bg p-4 text-sm leading-relaxed">{preview}</p>
-            <p className="font-mono text-xs text-console-muted">actionsRoot: {tree.root}</p>
+            <p className="border-l-4 border-ox-600 bg-ox-50 p-4 text-[15px] leading-relaxed">{preview}</p>
+            <p className="break-all font-mono text-xs text-mute">actionsRoot {tree.root}</p>
           </>
         )}
-        {err && <p className="text-sm text-red-400">{err}</p>}
-        <div className="flex justify-between pt-2">
+
+        {err && <Notice tone="bad">{err}</Notice>}
+
+        <div className="flex justify-between border-t border-line pt-5">
           <button type="button" className="btn-ghost" disabled={step === 0} onClick={() => setStep((s) => s - 1)}>
             Back
           </button>
           {step < 3 ? (
             <button type="button" className="btn-primary" onClick={() => setStep((s) => s + 1)} disabled={actions.length === 0}>
-              Next
+              Continue
             </button>
           ) : (
             <button type="button" className="btn-primary" disabled={busy} onClick={() => void submit()}>
-              {busy ? "Signing…" : "Create grant in MetaMask"}
+              {busy ? "Waiting for signature…" : "Create grant"}
             </button>
           )}
         </div>

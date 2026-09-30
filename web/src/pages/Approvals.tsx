@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { fetchPending } from "../lib/api";
 import { ethFromWei, shortAddr } from "../lib/format";
 import { useWallet } from "../lib/wallet";
+import { Empty, Notice, PageHeader } from "../components/ui";
 
 export function ApprovalsPage() {
   const { getContract, address } = useWallet();
@@ -29,38 +30,45 @@ export function ApprovalsPage() {
   });
 
   const rows = q.data?.pending ?? [];
+  const err = (approve.error ?? reject.error) as Error | null;
+  const working = approve.isPending || reject.isPending;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Approval queue</h2>
-        <p className="text-sm text-console-muted">High-value intents waiting for owner co-sign</p>
-      </div>
-      {!address && <p className="text-sm text-amber-300">Connect wallet as grant owner to approve or reject.</p>}
+    <div className="space-y-8">
+      <PageHeader
+        title="Approvals"
+        lead="Payments above a grant's approval threshold wait here until you co-sign them. Nothing moves until you decide."
+      />
+
+      {!address && <Notice tone="warn">Connect the grant owner's wallet to approve or reject.</Notice>}
+      {err && <Notice tone="bad">{err.message}</Notice>}
+
       {rows.length === 0 ? (
-        <div className="panel p-8 text-center text-console-muted">No pending approvals</div>
+        <Empty title="Nothing waiting" hint="When an agent asks to pay more than the approval threshold, the request will show up here." />
       ) : (
-        <div className="grid gap-4">
+        <ul className="divide-y divide-line border-y border-line">
           {rows.map((p) => (
-            <div key={p.pending_id} className="panel flex flex-wrap items-center justify-between gap-4 p-4">
-              <div>
-                <div className="font-medium">Pending #{p.pending_id}</div>
-                <div className="text-sm text-console-muted">
-                  Grant {p.grant_id} · {ethFromWei(p.amount)} ETH → {shortAddr(p.payee)}
-                </div>
-                <div className="text-xs text-console-muted">Expires {new Date(p.expires_at * 1000).toLocaleString()}</div>
+            <li key={p.pending_id} className="flex flex-wrap items-center justify-between gap-6 py-6">
+              <div className="min-w-0">
+                <p className="text-2xl font-extrabold tracking-tight">
+                  {ethFromWei(p.amount)} <span className="text-base font-semibold text-mute">ETH</span>
+                </p>
+                <p className="mt-1 text-sm text-mute">
+                  to <span className="font-mono text-ink">{shortAddr(p.payee)}</span> · Grant #{p.grant_id} · request #{p.pending_id}
+                </p>
+                <p className="mt-0.5 text-xs text-mute">Expires {new Date(p.expires_at * 1000).toLocaleString()}</p>
               </div>
               <div className="flex gap-2">
-                <button type="button" className="btn-primary" disabled={!address} onClick={() => approve.mutate(p.pending_id)}>
+                <button type="button" className="btn-primary" disabled={!address || working} onClick={() => approve.mutate(p.pending_id)}>
                   Approve
                 </button>
-                <button type="button" className="btn-ghost" disabled={!address} onClick={() => reject.mutate(p.pending_id)}>
+                <button type="button" className="btn-ghost" disabled={!address || working} onClick={() => reject.mutate(p.pending_id)}>
                   Reject
                 </button>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );

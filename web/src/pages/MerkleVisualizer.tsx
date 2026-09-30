@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { fetchGrant, fetchProof } from "../lib/api";
 import { AbiCoder, keccak256 } from "ethers";
+import clsx from "clsx";
+import { CopyHash, Notice, PageHeader, Section } from "../components/ui";
 
 export function MerkleVisualizerPage() {
   const [grantId, setGrantId] = useState(1);
@@ -118,399 +120,194 @@ export function MerkleVisualizerPage() {
     });
   }, [tree, actions, activeActionName, proofSet]);
 
+  const valid = !!verificationResult?.valid;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-400 border border-emerald-500/30">
-              Cryptographic Policy
-            </span>
-            <h2 className="text-xl font-bold tracking-tight text-slate-100">Merkle Proof Visualizer</h2>
-          </div>
-          <p className="mt-1 text-sm text-console-muted">
-            Interactive zero-knowledge inclusion proof verification for agent capability manifests
-          </p>
+    <div className="space-y-12">
+      <PageHeader
+        title="Merkle proof"
+        lead="The contract stores one hash for a grant's whole list of allowed actions. To use an action, the agent must prove it is in that list without revealing the rest."
+        actions={
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            Grant
+            <input className="input w-20 text-center" type="number" min={1} value={grantId} onChange={(e) => setGrantId(Number(e.target.value))} />
+          </label>
+        }
+      />
+
+      {/* What is being tested */}
+      <section aria-label="Choose an action to test" className="space-y-4">
+        <div role="tablist" aria-label="Test mode" className="inline-flex border border-line">
+          {([["whitelisted", "Allowed action"], ["custom", "Unauthorized action"]] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              role="tab"
+              aria-selected={testMode === mode}
+              onClick={() => {
+                setTestMode(mode);
+                if (mode === "custom" && !customAction) setCustomAction("transfer_funds");
+              }}
+              className={clsx("px-4 py-2 text-sm font-semibold transition-colors", testMode === mode ? (mode === "custom" ? "bg-bad text-white" : "bg-ox-600 text-white") : "bg-card text-mute hover:text-ink")}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* Grant Selector */}
-        <div className="flex items-center gap-3">
-          <label className="text-xs font-semibold uppercase tracking-wider text-console-muted">Grant ID</label>
-          <input
-            className="input w-24 text-center font-mono"
-            type="number"
-            min={1}
-            value={grantId}
-            onChange={(e) => setGrantId(Number(e.target.value))}
-          />
-        </div>
-      </div>
-
-      {/* Overview Cards */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="panel p-4">
-          <div className="text-xs uppercase font-semibold text-console-muted">On-Chain Root (Storage)</div>
-          <div className="mt-1 break-all font-mono text-xs text-cyan-300">
-            {tree ? tree.root : "No manifest loaded"}
-          </div>
-          <p className="mt-2 text-[11px] text-console-muted">
-            Single 32-byte hash committed to smart contract (O(1) storage)
-          </p>
-        </div>
-
-        <div className="panel p-4">
-          <div className="text-xs uppercase font-semibold text-console-muted">Manifest Actions (Leaves)</div>
-          <div className="mt-1 font-mono text-lg font-bold text-slate-200">
-            {actions.length} Authorized Actions
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {actions.map((a) => (
-              <span key={a} className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-                {a}
-              </span>
+        {testMode === "whitelisted" ? (
+          <div className="flex flex-wrap gap-2">
+            {actions.map((act) => (
+              <button
+                key={act}
+                type="button"
+                aria-pressed={selectedAction === act}
+                onClick={() => setSelectedAction(act)}
+                className={clsx("border px-3 py-1.5 font-mono text-sm transition-colors", selectedAction === act ? "border-ox-600 bg-ox-50 font-medium text-ox-700" : "border-line bg-card text-mute hover:border-ox-500")}
+              >
+                {act}
+              </button>
             ))}
           </div>
-        </div>
-
-        <div className="panel p-4">
-          <div className="text-xs uppercase font-semibold text-console-muted">Proof Complexity</div>
-          <div className="mt-1 font-mono text-lg font-bold text-amber-400">
-            {proofList.length} Sibling Hashes (O(log₂ N))
-          </div>
-          <p className="mt-2 text-[11px] text-console-muted">
-            Proves membership without revealing other unauthorized capabilities
-          </p>
-        </div>
-      </div>
-
-      {/* Action Selector & Tamper Test */}
-      <div className="panel p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-slate-200">Select Capability to Verify</h3>
-            <p className="text-xs text-console-muted">
-              Choose an authorized action from the manifest or test an unauthorized capability
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-console-border bg-black/40 p-1">
-              <button
-                type="button"
-                onClick={() => setTestMode("whitelisted")}
-                className={`rounded px-3 py-1 text-xs font-medium transition ${
-                  testMode === "whitelisted" ? "bg-emerald-500/20 text-emerald-300 font-bold" : "text-console-muted hover:text-slate-200"
-                }`}
-              >
-                Whitelisted Action
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <input className="input max-w-sm flex-1" placeholder="e.g. drain_vault" value={customAction} onChange={(e) => setCustomAction(e.target.value)} />
+            {["transfer_funds", "drain_escrow", "delegate_admin"].map((preset) => (
+              <button key={preset} type="button" onClick={() => setCustomAction(preset)} className="btn-ghost btn-sm font-mono">
+                {preset}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setTestMode("custom");
-                  if (!customAction) setCustomAction("transfer_funds");
-                }}
-                className={`rounded px-3 py-1 text-xs font-medium transition ${
-                  testMode === "custom" ? "bg-red-500/20 text-red-300 font-bold" : "text-console-muted hover:text-slate-200"
-                }`}
-              >
-                Test Unauthorized Action
-              </button>
-            </div>
+            ))}
           </div>
-        </div>
+        )}
+      </section>
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          {testMode === "whitelisted" ? (
-            <div className="flex flex-wrap gap-2">
-              {actions.map((act) => (
-                <button
-                  key={act}
-                  type="button"
-                  onClick={() => setSelectedAction(act)}
-                  className={`rounded-lg border px-3 py-1.5 font-mono text-xs transition ${
-                    selectedAction === act
-                      ? "border-emerald-500 bg-emerald-500/15 text-emerald-200 font-semibold shadow-sm"
-                      : "border-console-border bg-slate-900/60 text-slate-300 hover:border-slate-600"
-                  }`}
-                >
-                  {act}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="flex w-full flex-wrap gap-2">
-              <input
-                type="text"
-                placeholder="e.g. transfer_funds, drain_vault, execute_shell"
-                value={customAction}
-                onChange={(e) => setCustomAction(e.target.value)}
-                className="input flex-1 font-mono text-sm"
-              />
-              <div className="flex gap-2">
-                {["transfer_funds", "drain_escrow", "delegate_admin"].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => setCustomAction(preset)}
-                    className="btn-ghost text-xs font-mono"
-                  >
-                    +{preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Main Visualizer Area */}
       {tree && (
-        <div className="grid gap-6 lg:grid-cols-12">
-          {/* Left Column: Interactive Visual Tree Diagram */}
-          <div className="panel p-5 lg:col-span-7 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-200">Merkle Tree Architecture</h3>
-                  <p className="text-xs text-console-muted">Binary hash tree computed over manifest action identifiers</p>
-                </div>
-                <div className="flex items-center gap-3 text-[11px]">
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 inline-block" /> Target Leaf
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-amber-400 inline-block" /> Sibling Proof
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <span className="h-2.5 w-2.5 rounded-full bg-cyan-400 inline-block" /> Root
-                  </span>
-                </div>
-              </div>
+        <div className="grid gap-14 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
+          {/* The tree */}
+          <Section title="The tree" meta={`${actions.length} leaves · ${proofList.length} sibling${proofList.length === 1 ? "" : "s"} needed`}>
+            <div className="mt-5 border border-line bg-card p-4">
+              <svg viewBox="0 0 540 230" className="h-auto w-full" role="img" aria-label="Merkle tree of allowed actions">
+                <g fill="none" stroke="#C9BDBC" strokeWidth="2">
+                  <path d="M 270 45 C 270 80, 150 80, 150 105" />
+                  <path d="M 270 45 C 270 80, 390 80, 390 105" />
+                  <path d="M 150 135 C 150 155, 90 160, 90 175" strokeWidth="1.5" />
+                  <path d="M 150 135 C 150 155, 270 160, 270 175" strokeWidth="1.5" />
+                  <path d="M 390 135 C 390 155, 450 160, 450 175" strokeWidth="1.5" />
+                </g>
 
-              {/* Clean SVG-Based Hierarchical Merkle Tree */}
-              <div className="mt-5 rounded-xl border border-console-border bg-black/40 p-4">
-                <svg viewBox="0 0 540 230" className="w-full h-auto">
-                  {/* Connectors from Root (270, 42) to Branches (150, 115) and (390, 115) */}
-                  <path d="M 270 45 C 270 80, 150 80, 150 105" fill="none" stroke="#475569" strokeWidth="2" />
-                  <path d="M 270 45 C 270 80, 390 80, 390 105" fill="none" stroke="#475569" strokeWidth="2" />
+                <g transform="translate(180, 10)">
+                  <rect width="180" height="38" fill="#440A0E" />
+                  <text x="90" y="16" textAnchor="middle" fill="#ECD5D3" fontSize="9" fontWeight="600">ON-CHAIN ROOT</text>
+                  <text x="90" y="30" textAnchor="middle" fill="#fff" fontSize="10.5" fontFamily="IBM Plex Mono, monospace">
+                    {tree.root.slice(0, 8)}…{tree.root.slice(-6)}
+                  </text>
+                </g>
 
-                  {/* Connectors from Branches to Leaves */}
-                  <path d="M 150 135 C 150 155, 90 160, 90 175" fill="none" stroke="#475569" strokeWidth="1.5" />
-                  <path d="M 150 135 C 150 155, 220 160, 220 175" fill="none" stroke="#475569" strokeWidth="1.5" />
-                  <path d="M 390 135 C 390 155, 450 160, 450 175" fill="none" stroke="#475569" strokeWidth="1.5" />
-
-                  {/* Root Node Box */}
-                  <g transform="translate(180, 10)">
-                    <rect width="180" height="38" rx="6" fill="#083344" stroke="#06b6d4" strokeWidth="1.5" />
-                    <text x="90" y="16" textAnchor="middle" fill="#22d3ee" fontSize="9" fontWeight="bold" letterSpacing="0.5">
-                      ON-CHAIN ACTIONSROOT
-                    </text>
-                    <text x="90" y="29" textAnchor="middle" fill="#e2e8f0" fontSize="10" fontFamily="monospace">
-                      {tree.root.slice(0, 8)}…{tree.root.slice(-6)}
-                    </text>
+                {[65, 305].map((x) => (
+                  <g key={x} transform={`translate(${x}, 105)`}>
+                    <rect width="170" height="30" fill="#FBFAF9" stroke="#DCD3D2" />
+                    <text x="85" y="13" textAnchor="middle" fill="#75676A" fontSize="9" fontWeight="600">Branch hash</text>
+                    <text x="85" y="24" textAnchor="middle" fill="#75676A" fontSize="8" fontFamily="IBM Plex Mono, monospace">keccak256(left, right)</text>
                   </g>
+                ))}
 
-                  {/* Intermediate Branch Left */}
-                  <g transform="translate(65, 105)">
-                    <rect width="170" height="30" rx="5" fill="#0f172a" stroke="#334155" strokeWidth="1" />
-                    <text x="85" y="15" textAnchor="middle" fill="#94a3b8" fontSize="8">
-                      Internal Branch Hash
-                    </text>
-                    <text x="85" y="24" textAnchor="middle" fill="#64748b" fontSize="7.5" fontFamily="monospace">
-                      keccak256(Left || Right)
-                    </text>
-                  </g>
-
-                  {/* Intermediate Branch Right */}
-                  <g transform="translate(305, 105)">
-                    <rect width="170" height="30" rx="5" fill="#0f172a" stroke="#334155" strokeWidth="1" />
-                    <text x="85" y="15" textAnchor="middle" fill="#94a3b8" fontSize="8">
-                      Internal Branch Hash
-                    </text>
-                    <text x="85" y="24" textAnchor="middle" fill="#64748b" fontSize="7.5" fontFamily="monospace">
-                      keccak256(Left || Right)
-                    </text>
-                  </g>
-
-                  {/* Leaf Nodes */}
-                  {treeNodes.slice(0, 3).map((node, i) => {
-                    const xPositions = [10, 140, 370];
-                    const x = xPositions[i] ?? 10 + i * 160;
-                    const isSelected = node.name === activeActionName;
-                    const isSibling = proofSet.has(node.hash.toLowerCase());
-
-                    let strokeColor = "#334155";
-                    let fillColor = "#0f172a";
-                    let tagText = "";
-                    let tagFill = "";
-
-                    if (isSelected) {
-                      strokeColor = "#10b981";
-                      fillColor = "#064e3b";
-                      tagText = "TARGET";
-                      tagFill = "#34d399";
-                    } else if (isSibling) {
-                      strokeColor = "#f59e0b";
-                      fillColor = "#451a03";
-                      tagText = "SIBLING";
-                      tagFill = "#fbbf24";
-                    }
-
-                    return (
-                      <g key={node.name} transform={`translate(${x}, 175)`} className="cursor-pointer">
-                        <rect width="160" height="46" rx="5" fill={fillColor} stroke={strokeColor} strokeWidth="1.5" />
-                        <text x="10" y="16" fill="#f8fafc" fontSize="10" fontWeight="bold">
-                          {node.name}
-                        </text>
-                        {tagText && (
-                          <text x="150" y="15" textAnchor="end" fill={tagFill} fontSize="8" fontWeight="bold">
-                            {tagText}
-                          </text>
-                        )}
-                        <text x="10" y="29" fill="#94a3b8" fontSize="8" fontFamily="monospace">
-                          ID: {node.actionId.slice(0, 10)}…
-                        </text>
-                        <text x="10" y="39" fill="#64748b" fontSize="7.5" fontFamily="monospace">
-                          Leaf: {node.hash.slice(0, 12)}…
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
+                {treeNodes.slice(0, 3).map((node, i) => {
+                  const x = [10, 190, 370][i] ?? 10 + i * 180;
+                  const isSelected = node.name === activeActionName;
+                  const isSibling = proofSet.has(node.hash.toLowerCase());
+                  const fill = isSelected ? "#E1EEE7" : isSibling ? "#F7EBD6" : "#FBFAF9";
+                  const stroke = isSelected ? "#2C5A45" : isSibling ? "#9A5B0C" : "#DCD3D2";
+                  const tag = isSelected ? "TARGET" : isSibling ? "SIBLING" : "";
+                  return (
+                    <g key={node.name} transform={`translate(${x}, 175)`}>
+                      <rect width="160" height="46" fill={fill} stroke={stroke} strokeWidth={isSelected || isSibling ? 2 : 1} />
+                      <text x="10" y="17" fill="#1E1517" fontSize="10.5" fontWeight="600" fontFamily="IBM Plex Mono, monospace">{node.name}</text>
+                      {tag && <text x="150" y="16" textAnchor="end" fill={stroke} fontSize="8.5" fontWeight="700">{tag}</text>}
+                      <text x="10" y="31" fill="#75676A" fontSize="8" fontFamily="IBM Plex Mono, monospace">id {node.actionId.slice(0, 12)}…</text>
+                      <text x="10" y="41" fill="#75676A" fontSize="8" fontFamily="IBM Plex Mono, monospace">leaf {node.hash.slice(0, 12)}…</text>
+                    </g>
+                  );
+                })}
+              </svg>
+              <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-mute">
+                <span><i className="mr-1.5 inline-block h-2.5 w-2.5 bg-ok align-middle" />Action being proven</span>
+                <span><i className="mr-1.5 inline-block h-2.5 w-2.5 bg-warn align-middle" />Sibling hash in the proof</span>
+                <span><i className="mr-1.5 inline-block h-2.5 w-2.5 bg-ox-700 align-middle" />Root stored on-chain</span>
               </div>
             </div>
 
-            {/* Cryptographic Formula Breakdown */}
-            <div className="mt-4 rounded-lg border border-console-border bg-black/20 p-3 text-xs">
-              <div className="font-semibold text-slate-300">Mathematical leaf computation:</div>
-              <div className="mt-1 font-mono text-[11px] text-emerald-400 break-all">
-                1. a_i = keccak256(UTF8("{activeActionName}"))
-              </div>
-              <div className="font-mono text-[11px] text-emerald-400 break-all">
-                2. Leaf = keccak256(keccak256(abi.encode(a_i)))
-              </div>
-              <div className="font-mono text-[11px] text-emerald-400 break-all">
-                3. Parent = keccak256(min(Node_A, Node_B) || max(Node_A, Node_B))
-              </div>
-            </div>
-          </div>
+            <details className="group mt-6 border-t border-line pt-4">
+              <summary className="cursor-pointer text-sm font-semibold text-ox-600">How each hash is computed</summary>
+              <ol className="mt-3 space-y-1.5 break-all font-mono text-xs leading-relaxed text-mute">
+                <li>action id = keccak256("{activeActionName}")</li>
+                <li>leaf = keccak256(keccak256(abi.encode(action id)))</li>
+                <li>parent = keccak256(min(a, b) ‖ max(a, b))</li>
+              </ol>
+            </details>
+          </Section>
 
-          {/* Right Column: Step-by-Step On-Chain Verification & Sibling Proofs */}
-          <div className="space-y-4 lg:col-span-5 min-w-0">
-            {/* Proof Path Breakdown Panel */}
-            <div className="panel p-5 min-w-0">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-200">On-Chain Verification Trace</h3>
-                <span
-                  className={`shrink-0 rounded px-2 py-0.5 text-xs font-bold ${
-                    verificationResult?.valid
-                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                      : "bg-red-500/20 text-red-300 border border-red-500/40"
-                  }`}
-                >
-                  {verificationResult?.valid ? "✅ PROOF VALID (AUTHORIZED)" : "❌ PROOF INVALID (REVERTED)"}
-                </span>
-              </div>
-
-              <p className="mt-1 text-xs text-console-muted">
-                Simulating OpenZeppelin <code className="text-slate-300">MerkleProof.verify(proof, root, leaf)</code>
-              </p>
-
-              {/* Step by Step Breakdown */}
-              <div className="mt-4 space-y-3 min-w-0">
-                {/* Step 1: Leaf Hash */}
-                <div className="rounded border border-console-border bg-slate-900/70 p-3 text-xs min-w-0">
-                  <div className="flex items-center justify-between font-semibold text-slate-300">
-                    <span>Step 1: Compute Target Leaf Hash</span>
-                    <span className="font-mono text-[10px] text-emerald-400">keccak256</span>
-                  </div>
-                  <div className="mt-1 font-mono text-[11px] break-all text-slate-400">
-                    Action: <span className="text-slate-200 font-bold">"{activeActionName}"</span>
-                  </div>
-                  <div className="mt-1 font-mono text-[10px] break-all text-emerald-300/90 leading-relaxed">
-                    Leaf: {leafData?.leafHash ?? "—"}
-                  </div>
+          {/* The check */}
+          <Section title="Verification" meta={<span className={valid ? "font-semibold text-ok" : "font-semibold text-bad"}>{valid ? "Authorized" : "Rejected"}</span>}>
+            <ol className="mt-5 space-y-6">
+              <li className="flex gap-4">
+                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center bg-ox-600 text-xs font-bold text-white">1</span>
+                <div className="min-w-0">
+                  <p className="font-semibold">Hash the action</p>
+                  <p className="text-sm text-mute">"{activeActionName}" becomes a leaf.</p>
+                  <p className="mt-1.5 break-all font-mono text-xs">{leafData?.leafHash ?? "—"}</p>
                 </div>
-
-                {/* Step 2: Sibling Proof Path */}
-                <div className="rounded border border-console-border bg-slate-900/70 p-3 text-xs min-w-0">
-                  <div className="flex items-center justify-between font-semibold text-slate-300">
-                    <span>Step 2: Fold Sibling Proof Path</span>
-                    <span className="font-mono text-[10px] text-amber-400">{proofList.length} sibling(s)</span>
-                  </div>
+              </li>
+              <li className="flex gap-4">
+                <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center bg-ox-600 text-xs font-bold text-white">2</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">Fold in the sibling hashes</p>
                   {proofList.length === 0 ? (
-                    <div className="mt-2 text-xs text-red-300 font-mono">
-                      No sibling proofs available. Action not present in tree.
-                    </div>
+                    <p className="text-sm text-bad">No proof exists. This action is not in the tree.</p>
                   ) : (
-                    <div className="mt-2 space-y-1.5">
+                    <ul className="mt-2 space-y-1.5">
                       {proofList.map((sib, i) => (
-                        <div
-                          key={sib}
-                          className="flex flex-col gap-0.5 rounded bg-amber-500/10 p-2 font-mono text-[10px] text-amber-200 border border-amber-500/30"
-                        >
-                          <span className="font-bold text-amber-300">Sibling #{i + 1}</span>
-                          <span className="break-all text-amber-100/90 leading-tight">{sib}</span>
-                        </div>
+                        <li key={sib} className="flex items-baseline gap-3 bg-[#F7EBD6] px-3 py-1.5">
+                          <span className="text-xs font-semibold text-warn">#{i + 1}</span>
+                          <CopyHash value={sib} className="break-all border-transparent text-left" />
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
                 </div>
-
-                {/* Step 3: Root Comparison */}
-                <div
-                  className={`rounded border p-3 text-xs min-w-0 ${
-                    verificationResult?.valid
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                      : "border-red-500/40 bg-red-500/10 text-red-200"
-                  }`}
-                >
-                  <div className="font-semibold text-slate-200">
-                    Step 3: Root Equality Check
-                  </div>
-                  <div className="mt-2 font-mono text-[10px] space-y-2 min-w-0">
-                    <div className="rounded bg-black/30 p-2 border border-console-border min-w-0">
-                      <div className="text-[9px] uppercase text-console-muted">Computed Root</div>
-                      <div className="mt-0.5 break-all text-slate-200 leading-tight">
-                        {verificationResult?.valid ? tree.root : "0x0000000000000000000000000000000000000000000000000000000000000000"}
-                      </div>
+              </li>
+              <li className="flex gap-4">
+                <span className={clsx("mt-0.5 grid h-6 w-6 shrink-0 place-items-center text-xs font-bold text-white", valid ? "bg-ok" : "bg-bad")}>3</span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">Compare with the on-chain root</p>
+                  <dl className="mt-2 space-y-2 text-xs">
+                    <div>
+                      <dt className="text-mute">Computed</dt>
+                      <dd className="break-all font-mono">{valid ? tree.root : "0x" + "0".repeat(64)}</dd>
                     </div>
-                    <div className="rounded bg-black/30 p-2 border border-console-border min-w-0">
-                      <div className="text-[9px] uppercase text-console-muted">Expected Root (On-Chain)</div>
-                      <div className="mt-0.5 break-all text-cyan-300 leading-tight">
-                        {tree.root}
-                      </div>
+                    <div>
+                      <dt className="text-mute">Stored in the contract</dt>
+                      <dd className="break-all font-mono">{tree.root}</dd>
                     </div>
-                  </div>
-                  {verificationResult?.error && (
-                    <div className="mt-2 rounded bg-red-950/80 p-2 text-[11px] text-red-200 border border-red-800 break-words">
-                      {verificationResult.error}
-                    </div>
-                  )}
+                  </dl>
+                  <p className={clsx("mt-3 text-sm font-semibold", valid ? "text-ok" : "text-bad")}>
+                    {valid ? "They match. The action is authorized." : "They differ. The contract would revert this call."}
+                  </p>
+                  {verificationResult?.error && <div className="mt-2"><Notice tone="bad">{verificationResult.error}</Notice></div>}
                 </div>
-              </div>
-            </div>
-
-            {/* Academic Viva Context */}
-            <div className="panel p-4 text-xs text-console-muted">
-              <h4 className="font-semibold text-slate-300">Why Merkle Trees for Agent Sandboxing?</h4>
-              <ul className="mt-2 list-disc space-y-1 pl-4">
-                <li>
-                  <strong className="text-slate-300">Constant Storage Cost (O(1)):</strong> Storing a single 32-byte root allows thousands of permissioned actions without bloat.
-                </li>
-                <li>
-                  <strong className="text-slate-300">Sublinear Verification (O(log N)):</strong> Inclusion is proven on-chain with minimal gas.
-                </li>
-                <li>
-                  <strong className="text-slate-300">Least Privilege:</strong> Unlisted actions like prompt-injected fund drains fail proof validation instantly at the gateway or contract.
-                </li>
-              </ul>
-            </div>
-          </div>
+              </li>
+            </ol>
+          </Section>
         </div>
       )}
+
+      <details className="border-t border-line pt-5">
+        <summary className="cursor-pointer text-sm font-semibold text-ox-600">Why use a Merkle tree for this?</summary>
+        <ul className="mt-3 max-w-[70ch] list-disc space-y-2 pl-5 text-sm leading-relaxed text-mute">
+          <li><b className="text-ink">Constant storage.</b> One 32-byte root covers any number of actions.</li>
+          <li><b className="text-ink">Cheap checks.</b> A proof needs about log₂ N hashes, so on-chain verification stays inexpensive.</li>
+          <li><b className="text-ink">Least privilege.</b> An action that was never listed, such as a prompt-injected fund drain, has no valid proof and fails.</li>
+        </ul>
+      </details>
     </div>
   );
 }

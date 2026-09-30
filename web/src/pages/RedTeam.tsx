@@ -2,20 +2,23 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { fetchScenarios, runScenario } from "../lib/api";
 import { AGENT_API } from "../lib/constants";
+import { Empty, Notice, PageHeader, Section } from "../components/ui";
+import clsx from "clsx";
 
-const SCENARIO_LABELS: Record<string, string> = {
-  normal_day: "Normal day",
-  prompt_injection: "Prompt injection",
-  over_cap: "Exceed cap",
-  unlisted_action: "Unlisted action",
-  replay_signature: "Replay signature",
-  rate_limit_burst: "Rate limit burst",
+const SCENARIOS: Record<string, { label: string; what: string }> = {
+  normal_day: { label: "Normal day", what: "Routine allowed actions. Everything should pass." },
+  prompt_injection: { label: "Prompt injection", what: "A hidden instruction tries to redirect the agent." },
+  over_cap: { label: "Exceed cap", what: "Asks to move more than the per-call limit." },
+  unlisted_action: { label: "Unlisted action", what: "Calls an action that is not on the grant." },
+  replay_signature: { label: "Replay signature", what: "Resends an already-used signed request." },
+  rate_limit_burst: { label: "Rate limit burst", what: "Fires many calls to exhaust the window." },
 };
 
 export function RedTeamPage() {
   const [grantId, setGrantId] = useState(1);
   const [thoughts, setThoughts] = useState<{ text: string; at: string }[]>([]);
   const [lastResult, setLastResult] = useState<unknown>(null);
+  const [running, setRunning] = useState<string | null>(null);
 
   const scenariosQ = useQuery({ queryKey: ["scenarios"], queryFn: fetchScenarios });
 
@@ -33,62 +36,80 @@ export function RedTeamPage() {
   }, []);
 
   const run = useMutation({
-    mutationFn: (scenario: string) => runScenario(scenario, grantId),
+    mutationFn: (scenario: string) => {
+      setRunning(scenario);
+      return runScenario(scenario, grantId);
+    },
     onSuccess: setLastResult,
+    onSettled: () => setRunning(null),
   });
 
-  const list = scenariosQ.data?.scenarios ?? Object.keys(SCENARIO_LABELS);
+  const list = scenariosQ.data?.scenarios ?? Object.keys(SCENARIOS);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">Red team console</h2>
-        <p className="text-sm text-console-muted">Runs real scenarios via the Python agent → gateway → contract</p>
-      </div>
+    <div className="space-y-10">
+      <PageHeader
+        title="Red team"
+        lead="Launch a real attack from the Python agent and watch the gateway and contract respond. Results also appear in the audit log."
+        actions={
+          <label className="flex items-center gap-2 text-sm font-semibold">
+            Target grant
+            <input className="input w-20 text-center" type="number" min={1} value={grantId} onChange={(e) => setGrantId(Number(e.target.value))} />
+          </label>
+        }
+      />
 
-      <label className="flex items-center gap-2 text-sm">
-        Grant ID
-        <input className="input w-24" type="number" value={grantId} onChange={(e) => setGrantId(Number(e.target.value))} />
-      </label>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="panel space-y-2 p-4">
-          <h3 className="text-sm font-medium text-console-muted">Attacks</h3>
-          {list.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="btn-ghost w-full text-left"
-              disabled={run.isPending}
-              onClick={() => run.mutate(s)}
-            >
-              {SCENARIO_LABELS[s] ?? s}
-            </button>
-          ))}
-        </div>
-
-        <div className="panel max-h-[420px] overflow-y-auto p-4 lg:col-span-1">
-          <h3 className="mb-2 text-sm font-medium text-console-muted">Agent thoughts</h3>
-          <ul className="space-y-2 text-sm">
-            {thoughts.length === 0 && <li className="text-console-muted">Run a scenario…</li>}
-            {thoughts.map((t, i) => (
-              <li key={i} className="rounded-lg bg-console-bg/80 px-3 py-2">
-                {t.text}
+      <div className="grid gap-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <Section title="Attacks" meta={`${list.length} scenarios`}>
+          <ul className="divide-y divide-line">
+            {list.map((s) => (
+              <li key={s}>
+                <button
+                  type="button"
+                  disabled={run.isPending}
+                  onClick={() => run.mutate(s)}
+                  className={clsx("group flex w-full items-center justify-between gap-4 py-4 text-left transition-colors disabled:cursor-not-allowed", running === s ? "text-ox-600" : "hover:text-ox-600")}
+                >
+                  <span>
+                    <span className="block font-semibold">{SCENARIOS[s]?.label ?? s}</span>
+                    <span className="block text-sm font-normal text-mute">{SCENARIOS[s]?.what ?? "Custom scenario."}</span>
+                  </span>
+                  <span className={clsx("shrink-0 border px-3 py-1 text-xs font-semibold", running === s ? "border-ox-600 bg-ox-600 text-white" : "border-line text-mute group-hover:border-ox-500 group-hover:text-ox-600")}>
+                    {running === s ? "Running…" : "Run"}
+                  </span>
+                </button>
               </li>
             ))}
           </ul>
-        </div>
+        </Section>
 
-        <div className="panel p-4 lg:col-span-1">
-          <h3 className="mb-2 text-sm font-medium text-console-muted">Contract response</h3>
-          {run.isError && <p className="text-sm text-red-400">{(run.error as Error).message}</p>}
-          {lastResult ? (
-            <pre className="max-h-80 overflow-auto rounded-lg bg-console-bg p-3 font-mono text-xs text-slate-300">
-              {JSON.stringify(lastResult, null, 2)}
-            </pre>
-          ) : (
-            <p className="text-sm text-console-muted">No run yet. Start agent on :8000.</p>
-          )}
+        <div className="space-y-10">
+          <Section title="Agent thoughts" meta="live">
+            <div className="max-h-72 overflow-y-auto">
+              {thoughts.length === 0 ? (
+                <p className="py-6 text-sm text-mute">Run an attack to see what the agent is reasoning.</p>
+              ) : (
+                <ul className="divide-y divide-line">
+                  {thoughts.map((t, i) => (
+                    <li key={i} className="py-2.5 text-sm leading-relaxed">{t.text}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Section>
+
+          <Section title="Contract response">
+            {run.isError && <div className="mt-4"><Notice tone="bad">{(run.error as Error).message}</Notice></div>}
+            {lastResult ? (
+              <pre className="mt-4 max-h-80 overflow-auto bg-sunk p-4 font-mono text-xs leading-relaxed">{JSON.stringify(lastResult, null, 2)}</pre>
+            ) : (
+              !run.isError && (
+                <div className="mt-4">
+                  <Empty title="No run yet" hint="Pick an attack on the left. The agent service must be running on port 8000." />
+                </div>
+              )
+            )}
+          </Section>
         </div>
       </div>
     </div>
