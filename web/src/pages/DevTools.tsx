@@ -1,476 +1,178 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import {
-  devHealth,
-  devResetDemo,
-  devRestoreAudit,
-  devTamperAudit,
-  verifyAudit,
-  type VerifyResult,
-} from "../lib/api";
-import { formatEther } from "ethers";
-
-function safeFormatAmount(rawAmount?: string | number): string {
-  if (!rawAmount) return "0 ETH";
-  const s = String(rawAmount).trim();
-  try {
-    if (s.includes(".")) {
-      return `${s} ETH`;
-    }
-    const b = BigInt(s);
-    if (b === 0n) return "0 ETH";
-    return `${formatEther(b)} ETH`;
-  } catch {
-    return `${s} wei`;
-  }
-}
+import { BlockChainView } from "../components/BlockChainView";
+import { INTEGRITY_KEY, useIntegrity } from "../hooks/useIntegrity";
+import { devDeleteBlock, devHealth, devRemine, devResetDemo, devRestoreAudit, devTamperAudit, runScenario, type TamperField } from "../lib/api";
 
 export function DevToolsPage() {
-  const queryClient = useQueryClient();
-  const [selectedTamperField, setSelectedTamperField] = useState<"amount" | "code" | "action_name" | "head">("amount");
-  const [tamperValue, setTamperValue] = useState("0");
-  const [tamperIndex, setTamperIndex] = useState<number | null>(null);
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  const [mineNote, setMineNote] = useState<string | null>(null);
 
-  const health = useQuery({
-    queryKey: ["dev-health"],
-    queryFn: devHealth,
-    refetchInterval: 5000,
+  const health = useQuery({ queryKey: ["dev-health"], queryFn: devHealth, refetchInterval: 5000 });
+  const verify = useIntegrity();
+
+  const refresh = () => {
+    setError(null);
+    void qc.invalidateQueries({ queryKey: INTEGRITY_KEY });
+    void qc.invalidateQueries({ queryKey: ["events"] });
+    void qc.invalidateQueries({ queryKey: ["events-audit"] });
+  };
+  const onError = (e: unknown) => setError(e instanceof Error ? e.message : String(e));
+
+  const tamper = useMutation({
+    mutationFn: (v: { index: number; fields: Partial<Record<TamperField, string>> }) => devTamperAudit(v.index, v.fields),
+    onSuccess: refresh,
+    onError,
   });
-
-  const verify = useQuery<VerifyResult>({
-    queryKey: ["audit-verify"],
-    queryFn: () => verifyAudit(),
-    refetchInterval: 4000,
-  });
-
-  const tamperMutation = useMutation({
-    mutationFn: ({
-      index,
-      field,
-      value,
-    }: {
-      index: number;
-      field: "amount" | "code" | "action_name" | "head";
-      value: string;
-    }) => devTamperAudit(index, field, value),
+  const remine = useMutation({ mutationFn: (v: { index: number; mode: "one" | "all" }) => devRemine(v.index, v.mode), onSuccess: refresh, onError });
+  const del = useMutation({ mutationFn: (index: number) => devDeleteBlock(index), onSuccess: refresh, onError });
+  const restore = useMutation({
+    mutationFn: devRestoreAudit,
     onSuccess: () => {
-      setTamperIndex(null);
-      void verify.refetch();
-      void queryClient.invalidateQueries({ queryKey: ["audit-verify"] });
-      void queryClient.invalidateQueries({ queryKey: ["events"] });
+      setMineNote(null);
+      refresh();
     },
+    onError,
   });
-
-  const restoreMutation = useMutation({
-    mutationFn: () => devRestoreAudit(),
+  const reset = useMutation({
+    mutationFn: devResetDemo,
     onSuccess: () => {
-      void verify.refetch();
-      void queryClient.invalidateQueries({ queryKey: ["audit-verify"] });
-      void queryClient.invalidateQueries({ queryKey: ["events"] });
-    },
-  });
-
-  const resetMutation = useMutation({
-    mutationFn: () => devResetDemo(),
-    onSuccess: () => {
-      void verify.refetch();
+      setMineNote(null);
       void health.refetch();
-      void queryClient.invalidateQueries();
+      void qc.invalidateQueries();
+    },
+    onError,
+  });
+  const mine = useMutation({
+    mutationFn: () => runScenario("normal_day", 1),
+    onSuccess: (res: { results?: Array<{ status?: number; outcome?: string }> }) => {
+      const results = res?.results ?? [];
+      const refused = results.filter((r) => r.status === 423).length;
+      const appended = results.filter((r) => r.outcome && r.outcome !== "Error" && r.outcome !== "Refused").length;
+      setMineNote(refused ? `${refused} block${refused > 1 ? "s" : ""} refused (chain tampered), ${appended} appended` : `${appended} block${appended === 1 ? "" : "s"} appended`);
+      refresh();
+    },
+    onError: (e) => {
+      setMineNote(null);
+      onError(e);
     },
   });
 
-  const rows = verify.data?.rows ?? [];
-  const brokenAt = verify.data?.brokenAt;
-  const isChainValid = verify.data?.valid ?? true;
+  const data = verify.data;
+  const busy = tamper.isPending || remine.isPending || del.isPending || restore.isPending;
+  const firstBad = data?.blocks.find((b) => b.status !== "ok");
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-5">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <div className="flex items-center gap-2">
-            <span className="rounded bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-400 border border-indigo-500/30">
-              On-Chain Cryptographic Ledger
-            </span>
-            <h2 className="text-xl font-bold tracking-tight text-slate-100">
-              Blockchain & Audit Hash-Chain Visualizer
-            </h2>
+            <span className="rounded border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-400">On-Chain Cryptographic Ledger</span>
+            <h2 className="text-xl font-bold tracking-tight text-slate-100">Audit blockchain</h2>
           </div>
           <p className="mt-1 text-sm text-console-muted">
-            Inspect immutable block links, simulate adversarial tampering, and test on-chain verification
+            Edit any block to tamper with it. Every page flags it, and the gateway refuses to add new blocks until the chain is restored.
           </p>
         </div>
-
-        {/* Global Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="btn-ghost text-xs"
-            disabled={restoreMutation.isPending}
-            onClick={() => restoreMutation.mutate()}
-            title="Restore off-chain database from on-chain event ground truth"
-          >
-            {restoreMutation.isPending ? "Restoring…" : "🛡️ Restore Ground Truth"}
+          <button type="button" className="btn-ghost text-xs" disabled={restore.isPending} onClick={() => restore.mutate()} title="Rebuild the off-chain copy from on-chain events">
+            {restore.isPending ? "Restoring…" : "🛡️ Restore from chain"}
           </button>
-          <button
-            type="button"
-            className="btn-primary text-xs"
-            disabled={verify.isFetching}
-            onClick={() => void verify.refetch()}
-          >
-            {verify.isFetching ? "Verifying…" : "⚡ Re-Verify Hash Chain"}
+          <button type="button" className="btn-primary text-xs" disabled={verify.isFetching} onClick={() => void verify.refetch()}>
+            {verify.isFetching ? "Verifying…" : "⚡ Re-verify"}
           </button>
           <button
             type="button"
             className="btn-danger text-xs"
-            disabled={resetMutation.isPending}
-            onClick={() => {
-              if (confirm("Reset demo: Deploy fresh contract, wipe state, and seed Grant #1?")) {
-                resetMutation.mutate();
-              }
-            }}
+            disabled={reset.isPending}
+            onClick={() => confirm("Reset demo: deploy a fresh contract, wipe state, seed Grant #1?") && reset.mutate()}
           >
-            {resetMutation.isPending ? "Resetting…" : "🔄 Reset Demo"}
+            {reset.isPending ? "Resetting…" : "🔄 Reset demo"}
           </button>
         </div>
       </div>
 
-      {/* Network & Chain Status Banner */}
       <div className="panel grid gap-4 p-4 text-xs sm:grid-cols-4">
         <div>
-          <div className="text-console-muted">RPC Node Endpoint</div>
-          <div className="mt-1 font-mono font-semibold text-slate-200">{health.data?.rpcUrl ?? "http://127.0.0.1:7545"}</div>
+          <div className="text-console-muted">RPC endpoint</div>
+          <div className="mt-1 font-mono font-semibold text-slate-200">{health.data?.rpcUrl ?? "…"}</div>
         </div>
-        <div>
-          <div className="text-console-muted">Contract Address</div>
-          <div className="mt-1 font-mono font-semibold text-emerald-300 truncate" title={health.data?.contract}>
+        <div className="min-w-0">
+          <div className="text-console-muted">Contract</div>
+          <div className="mt-1 truncate font-mono font-semibold text-emerald-300" title={health.data?.contract}>
             {health.data?.contract ?? "Loading…"}
           </div>
         </div>
         <div>
-          <div className="text-console-muted">Chain ID / Status</div>
+          <div className="text-console-muted">Chain id / status</div>
           <div className="mt-1 font-mono font-semibold text-slate-200">
-            {health.data?.chainId ?? 1337} • {health.data?.contractLive ? "🟢 Contract Live" : "🟡 Offline"}
+            {health.data?.chainId ?? "—"} • {health.data?.contractLive ? "🟢 live" : "🟡 offline"}
           </div>
         </div>
         <div>
-          <div className="text-console-muted">Hash-Chain Verification</div>
+          <div className="text-console-muted">Hash-chain verification</div>
           <div className="mt-1 font-mono font-semibold">
-            {rows.length === 0 ? (
-              <span className="text-slate-400">0 Action Blocks (Genesis only)</span>
-            ) : isChainValid ? (
-              <span className="text-emerald-400">✅ VALID ({rows.length} Blocks Verified)</span>
+            {!data ? (
+              <span className="text-slate-400">Verifying…</span>
+            ) : data.blocks.length === 0 && data.valid ? (
+              <span className="text-slate-400">Genesis only</span>
+            ) : data.valid ? (
+              <span className="text-emerald-400">✅ VALID ({data.blocks.length} blocks{data.lagging ? ", syncing" : ""})</span>
             ) : (
-              <span className="text-red-400 font-bold animate-pulse">
-                🚨 BROKEN at Block #{(brokenAt ?? 0) + 1}
-              </span>
+              <span className="animate-pulse font-bold text-red-400">🚨 BROKEN at Block #{(data.brokenAt ?? 0) + 1}</span>
             )}
           </div>
+          {data && !data.chainAvailable && <div className="mt-1 text-[10px] text-amber-300">On-chain record unreachable — checking hash links only.</div>}
         </div>
       </div>
 
-      {/* Verification Status Alert */}
-      {rows.length > 0 && !isChainValid && (
+      {error && <div className="rounded-lg border border-red-500/40 bg-red-950/40 p-3 text-xs text-red-200">{error}</div>}
+
+      {data && !data.valid && (
         <div className="rounded-lg border border-red-500/50 bg-red-950/40 p-4 text-xs text-red-200">
-          <div className="flex items-center gap-2 font-bold text-red-300">
-            <span className="text-base">🚨</span>
-            CRYPTOGRAPHIC HASH MISMATCH DETECTED
-          </div>
+          <div className="font-bold text-red-300">🚨 Tampering detected — {data.tamperedCount} block(s) failing verification</div>
           <p className="mt-1 text-red-300/90">
-            Block #{(brokenAt ?? 0) + 1} contains altered state data. The computed keccak256 hash does not match the
-            on-chain immutable root. Subsequent blocks cannot be appended to a compromised chain state.
+            {firstBad ? `Block #${firstBad.index + 1}: ${firstBad.reasons.join(" ")}` : data.missing.length ? "One or more blocks were deleted." : "The final hash differs from the contract's auditHead."}{" "}
+            <strong>Red</strong> = the block's content differs from the on-chain record. <strong>Amber</strong> = the block is intact, but the block before it changed, so its link
+            no longer verifies.
           </p>
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              type="button"
-              className="rounded bg-red-500/30 px-2.5 py-1 font-semibold text-red-100 hover:bg-red-500/50 border border-red-500/40"
-              onClick={() => restoreMutation.mutate()}
-            >
-              🛡️ Restore SQLite from On-Chain Ground Truth
-            </button>
-          </div>
         </div>
       )}
 
-      {/* Blockchain Blocks Flow */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-console-muted">
-            Blockchain & State Hash-Chain Sequence
-          </h3>
-          <span className="text-xs text-console-muted font-mono">
-            H(i) = keccak256(H(i-1) || grantId || actionId || amount || code || blockNumber)
-          </span>
-        </div>
-
-        <div className="space-y-4">
-          {/* Genesis Block #0 */}
-          <div className="panel border-l-4 border-l-cyan-500 p-4 transition">
-            <div className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-              <div className="flex items-center gap-2">
-                <span className="rounded bg-cyan-500/20 px-2 py-0.5 font-mono text-xs font-bold text-cyan-300 border border-cyan-500/40">
-                  Block #0
-                </span>
-                <span className="font-semibold text-slate-200">Genesis State Anchor</span>
-                <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">IMMUTABLE</span>
-              </div>
-              <div className="text-xs font-mono text-console-muted">Block Height: #0 • Nonce: 0</div>
-            </div>
-
-            <div className="mt-3 grid gap-3 text-xs sm:grid-cols-2 md:grid-cols-3">
-              <div className="rounded bg-black/40 p-2 border border-console-border">
-                <div className="text-[10px] uppercase text-console-muted">Initial State Head (H₀)</div>
-                <div className="mt-0.5 font-mono text-[11px] text-cyan-300 break-all">
-                  0x0000000000000000000000000000000000000000000000000000000000000000
-                </div>
-              </div>
-              <div className="rounded bg-black/40 p-2 border border-console-border">
-                <div className="text-[10px] uppercase text-console-muted">Protocol Initializer</div>
-                <div className="mt-0.5 text-[11px] text-slate-300">Contract Construction & Grant Initializer</div>
-              </div>
-              <div className="rounded bg-black/40 p-2 border border-console-border">
-                <div className="text-[10px] uppercase text-console-muted">Chain Status</div>
-                <div className="mt-0.5 text-[11px] text-emerald-400 font-semibold">🔗 Genesis Anchor Verified</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Subsequent Action Blocks */}
-          {rows.map((row, idx) => {
-            const isCorrupted = brokenAt !== null && brokenAt !== undefined && idx >= brokenAt;
-            const isDirectBrokenPoint = brokenAt === idx;
-            const formattedAmount = safeFormatAmount(row.amount);
-
-            return (
-              <div key={row.index} className="space-y-2">
-                {/* Chain Link Connector */}
-                <div className="flex items-center justify-center py-1">
-                  <div
-                    className={`flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-mono border ${
-                      isCorrupted
-                        ? "border-red-500/60 bg-red-950/60 text-red-300 animate-pulse"
-                        : "border-emerald-500/40 bg-emerald-950/40 text-emerald-300"
-                    }`}
-                  >
-                    {isCorrupted ? (
-                      <>
-                        <span>⚡</span>
-                        <span>HASH MISMATCH: Previous state does not yield valid Head</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>🔗</span>
-                        <span>Cryptographic Hash Link Validated</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Block Card */}
-                <div
-                  className={`panel p-4 transition ${
-                    isCorrupted
-                      ? "border-l-4 border-l-red-500 border-red-500/40 bg-red-950/20"
-                      : "border-l-4 border-l-emerald-500 border-console-border"
-                  }`}
-                >
-                  <div className="flex flex-col justify-between gap-2 md:flex-row md:items-center">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`rounded px-2 py-0.5 font-mono text-xs font-bold border ${
-                          isCorrupted
-                            ? "bg-red-500/20 text-red-300 border-red-500/40"
-                            : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                        }`}
-                      >
-                        Block #{idx + 1}
-                      </span>
-                      <span className="font-semibold text-slate-200">
-                        Action:{" "}
-                        <span className="font-mono text-emerald-300">
-                          {row.actionName ?? (row.actionId ? `${row.actionId.slice(0, 10)}…` : "unnamed")}
-                        </span>
-                      </span>
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                          row.code === 0
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : "bg-amber-500/20 text-amber-300"
-                        }`}
-                      >
-                        {row.outcome ?? (row.code === 0 ? "Success" : `Code ${row.code}`)}
-                      </span>
-                      {isDirectBrokenPoint && (
-                        <span className="rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase animate-bounce">
-                          Tampered Block
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Tamper Button */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setTamperIndex(tamperIndex === row.index ? null : row.index)}
-                        className={`rounded px-2 py-1 text-xs font-semibold transition border ${
-                          isCorrupted
-                            ? "border-red-500/40 bg-red-500/20 text-red-200 hover:bg-red-500/30"
-                            : "border-slate-700 bg-slate-800 text-slate-300 hover:border-amber-500/50 hover:text-amber-200"
-                        }`}
-                      >
-                        ✏️ {tamperIndex === row.index ? "Cancel" : "Tamper Data"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Tamper Interactive Box */}
-                  {tamperIndex === row.index && (
-                    <div className="mt-3 rounded-lg border border-amber-500/50 bg-black/60 p-3 text-xs space-y-3">
-                      <div className="font-semibold text-amber-300">
-                        Simulate Adversarial Attack: Alter Block #{idx + 1} Off-Chain Record
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <label>
-                          <span className="text-[10px] text-console-muted">Field to Corrupt</span>
-                          <select
-                            className="input mt-1 w-full text-xs"
-                            value={selectedTamperField}
-                            onChange={(e) => setSelectedTamperField(e.target.value as any)}
-                          >
-                            <option value="amount">Amount (wei)</option>
-                            <option value="code">Outcome Code (0 = Success)</option>
-                            <option value="action_name">Action Name</option>
-                            <option value="head">State Hash Head</option>
-                          </select>
-                        </label>
-
-                        <label className="sm:col-span-2">
-                          <span className="text-[10px] text-console-muted">Corrupted Value</span>
-                          <input
-                            type="text"
-                            className="input mt-1 w-full font-mono text-xs"
-                            value={tamperValue}
-                            onChange={(e) => setTamperValue(e.target.value)}
-                            placeholder="e.g. 0, 999999999999999999, transfer_funds"
-                          />
-                        </label>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="btn-danger text-xs py-1"
-                          disabled={tamperMutation.isPending}
-                          onClick={() =>
-                            tamperMutation.mutate({
-                              index: row.index,
-                              field: selectedTamperField,
-                              value: tamperValue,
-                            })
-                          }
-                        >
-                          {tamperMutation.isPending ? "Corrupting…" : "🚨 Apply Malicious Tamper"}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-ghost text-xs py-1"
-                          onClick={() => setTamperIndex(null)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Block Metadata Grid */}
-                  <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 md:grid-cols-4">
-                    <div className="rounded bg-black/30 p-2 border border-console-border">
-                      <div className="text-[10px] uppercase text-console-muted">Grant & Nonce</div>
-                      <div className="mt-0.5 font-mono text-slate-200">
-                        Grant #{row.grantId} • Seq #{row.index}
-                      </div>
-                    </div>
-                    <div className="rounded bg-black/30 p-2 border border-console-border">
-                      <div className="text-[10px] uppercase text-console-muted">Amount Executed</div>
-                      <div className="mt-0.5 font-mono text-emerald-300">{formattedAmount}</div>
-                    </div>
-                    <div className="rounded bg-black/30 p-2 border border-console-border">
-                      <div className="text-[10px] uppercase text-console-muted">Block Height</div>
-                      <div className="mt-0.5 font-mono text-slate-300">#{row.blockNumber}</div>
-                    </div>
-                    <div className="rounded bg-black/30 p-2 border border-console-border min-w-0">
-                      <div className="text-[10px] uppercase text-console-muted">Tx Hash</div>
-                      <div className="mt-0.5 font-mono text-[10px] text-slate-400 truncate" title={row.txHash}>
-                        {row.txHash ? `${row.txHash.slice(0, 14)}…` : "—"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* State Head Comparison */}
-                  <div className="mt-2 rounded bg-black/40 p-2 border border-console-border min-w-0">
-                    <div className="flex items-center justify-between text-[10px] uppercase text-console-muted">
-                      <span>State Hash Head (H_{idx + 1})</span>
-                      <span className="font-mono text-[10px] text-slate-400">
-                        keccak256(H_{idx} || Grant || Action || Amount || Code || Block)
-                      </span>
-                    </div>
-                    <div
-                      className={`mt-1 font-mono text-[11px] break-all leading-tight ${
-                        isCorrupted ? "text-red-300 line-through decoration-red-500" : "text-emerald-400"
-                      }`}
-                    >
-                      {row.head}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Empty State when no actions yet */}
-          {rows.length === 0 && (
-            <div className="rounded-xl border border-dashed border-console-border p-8 text-center">
-              <div className="mx-auto max-w-sm text-center">
-                <div className="text-2xl">⛓️</div>
-                <h4 className="mt-2 font-semibold text-slate-200">No Action Blocks Recorded Yet</h4>
-                <p className="mt-1 text-xs text-console-muted">
-                  Head over to <strong className="text-slate-200">Red Team</strong> and execute a scenario (e.g.{" "}
-                  <em>Normal Day</em> or <em>Prompt Injection</em>). Each on-chain policy evaluation will append a new
-                  cryptographically linked block here in real-time!
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-console-muted">Blockchain — scroll →</h3>
+        <span className="font-mono text-[11px] text-console-muted"># = covered by hash · H(i) = keccak256(H(i-1) ‖ grant ‖ action ‖ amount ‖ params ‖ code ‖ height)</span>
       </div>
 
-      {/* Academic / Viva Context Footer */}
-      <div className="panel p-5 text-xs text-console-muted space-y-3">
-        <h4 className="font-semibold text-slate-200">Academic & Viva Explanation: Why Hash-Chaining Matters</h4>
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <strong className="text-slate-300">1. Tamper-Evidence:</strong>
-            <p className="mt-1">
-              Every audit entry incorporates the hash of the preceding entry. If an attacker modifies an off-chain
-              database row (e.g. turning a strike into a success), the computed head diverges from the contract's on-chain
-              head.
-            </p>
-          </div>
-          <div>
-            <strong className="text-slate-300">2. Constant On-Chain Overhead:</strong>
-            <p className="mt-1">
-              The smart contract only maintains a single 32-byte storage slot for <code className="text-slate-300">auditHead</code>.
-              Gas is minimal because the full logs are indexed off-chain and verified on demand.
-            </p>
-          </div>
-          <div>
-            <strong className="text-slate-300">3. Deterministic Verification:</strong>
-            <p className="mt-1">
-              Any auditor can independently re-execute the keccak256 chain from Genesis (H₀) to the current block to prove
-              mathematically that zero logs have been deleted or altered.
-            </p>
-          </div>
-        </div>
+      {data ? (
+        <BlockChainView
+          data={data}
+          busy={busy}
+          mining={mine.isPending}
+          mineNote={mineNote}
+          onTamper={(index, fields) => tamper.mutate({ index, fields })}
+          onRemine={(index, mode) => remine.mutate({ index, mode })}
+          onDelete={(index) => del.mutate(index)}
+          onMine={() => mine.mutate()}
+        />
+      ) : (
+        <div className="panel p-8 text-center text-sm text-console-muted">Loading chain…</div>
+      )}
+
+      {data && data.blocks.length === 0 && (
+        <p className="text-center text-xs text-console-muted">No action blocks yet — click “Mine next blocks” above (needs the agent on :8000) to append some.</p>
+      )}
+
+      <div className="panel space-y-2 p-4 text-xs text-console-muted">
+        <h4 className="font-semibold text-slate-200">Try it (viva walkthrough)</h4>
+        <ol className="list-decimal space-y-1 pl-5">
+          <li><strong className="text-slate-300">Tamper</strong> a block (e.g. change its amount) → that block turns red, the banner appears on every page, and the on-chain value is shown next to yours.</li>
+          <li>Click <strong className="text-slate-300">Mine next blocks</strong> → the gateway answers 423 and nothing is appended.</li>
+          <li><strong className="text-slate-300">Re-mine</strong> the block (attacker fixes its hash) → it looks consistent, but the <em>next</em> block's link breaks and it still differs from the chain.</li>
+          <li><strong className="text-slate-300">Re-mine all after</strong> → every local hash verifies, yet it is still caught because the contract's <code>auditHead</code> and events are the anchor.</li>
+          <li><strong className="text-slate-300">Restore from chain</strong> → rebuilt from on-chain events, banner clears, mining works again.</li>
+        </ol>
       </div>
     </div>
   );

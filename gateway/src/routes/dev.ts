@@ -4,7 +4,15 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContractFactory, JsonRpcProvider, NonceManager, Wallet, parseEther, type Signer } from "ethers";
 import { config } from "../config.js";
-import { restoreAuditFromChain, tamperAuditRow } from "../audit/verify.js";
+import {
+  clearRejections,
+  deleteAuditRow,
+  publishIntegrity,
+  remineAuditChain,
+  restoreAuditFromChain,
+  tamperAuditRow,
+  type TamperField,
+} from "../audit/verify.js";
 import { getCalendar, getInbox } from "../providers/mock.js";
 import { getProvider, updateDeploymentAddress } from "../contract/client.js";
 import { saveManifest } from "../proof/service.js";
@@ -33,20 +41,45 @@ export async function devRoutes(app: FastifyInstance) {
     return { advancedSeconds: seconds, timestamp: block?.timestamp };
   });
 
-  /** Corrupt one indexed audit row to demo hash-chain verification failure. */
-  app.post<{ Body: { index: number; field?: "amount" | "code" | "action_id" | "action_name" | "head"; value?: string } }>(
-    "/dev/tamper-audit",
-    async (req) => {
-      const index = req.body?.index;
-      if (index === undefined) return app.httpErrors.badRequest("index required");
-      tamperAuditRow(index, req.body.field ?? "amount", req.body.value ?? "999999999999999999");
-      return { tampered: index, field: req.body.field ?? "amount" };
-    },
-  );
+  /**
+   * Corrupt an indexed audit row (off-chain copy only). Send either `{ index, field, value }` or
+   * `{ index, fields: { amount: "1", code: 0, … } }`. `{ index, delete: true }` removes the block instead.
+   */
+  app.post<{
+    Body: { index: number; field?: TamperField; value?: string | number; fields?: Partial<Record<TamperField, string | number>>; delete?: boolean };
+  }>("/dev/tamper-audit", async (req, reply) => {
+    const { index, field, value, fields, delete: del } = req.body ?? ({} as any);
+    if (index === undefined) return reply.badRequest("index required");
+    try {
+      if (del) {
+        deleteAuditRow(index);
+      } else {
+        const updates = fields ?? { [field ?? "amount"]: value ?? "999999999999999999" };
+        tamperAuditRow(index, updates);
+      }
+    } catch (e: any) {
+      return reply.badRequest(e?.message ?? String(e));
+    }
+    const report = await publishIntegrity();
+    return { tampered: index, deleted: !!del, valid: report.valid, brokenAt: report.brokenAt };
+  });
+
+  /** Attacker recomputes hashes after an edit (mode "one" = that block only, "all" = every block after it too). */
+  app.post<{ Body: { index: number; mode?: "one" | "all" } }>("/dev/remine", async (req, reply) => {
+    if (req.body?.index === undefined) return reply.badRequest("index required");
+    try {
+      const updated = remineAuditChain(req.body.index, req.body.mode ?? "one");
+      const report = await publishIntegrity();
+      return { remined: updated, valid: report.valid, brokenAt: report.brokenAt };
+    } catch (e: any) {
+      return reply.badRequest(e?.message ?? String(e));
+    }
+  });
 
   /** Restore SQLite audit entries from on-chain event logs */
   app.post("/dev/restore-audit", async () => {
     await restoreAuditFromChain();
+    await publishIntegrity();
     return { status: "ok", message: "Audit logs restored from on-chain ground truth" };
   });
 
@@ -169,6 +202,7 @@ async function doReset() {
   saveManifest(1, actions, tree.root);
   await syncNow(); // grants + (empty) audit for the new contract
 
+  clearRejections();
   sse.publish({ type: "reset", data: { address: newAddress } });
   sse.publish({ type: "grant", data: { grantId: 1, event: "Reset", address: newAddress } });
   return { status: "ok", address: newAddress, message: "Fresh contract deployed; everything wiped; Grant #1 seeded" };

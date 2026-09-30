@@ -4,11 +4,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "../lib/wallet";
 import { devResetDemo } from "../lib/api";
 import { shortAddr } from "../lib/format";
+import { useIntegrity } from "../hooks/useIntegrity";
 
 export function Header() {
   const { address, balance, chainOk, connect, connectDev, disconnect, connecting, config, isDevMode, refreshConfig } = useWallet();
   const qc = useQueryClient();
   const [resetting, setResetting] = useState(false);
+  const integrity = useIntegrity().data;
 
   async function handleReset() {
     if (resetting) return;
@@ -47,6 +49,17 @@ export function Header() {
             <RotateCcw className={`h-3.5 w-3.5 ${resetting ? "animate-spin text-cyan-400" : ""}`} />
             {resetting ? "Resetting…" : "Reset Demo"}
           </button>
+
+          {integrity && (
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-medium ${
+                integrity.valid ? "bg-emerald-500/15 text-emerald-300" : "animate-pulse bg-red-500/20 text-red-300"
+              }`}
+              title="Audit hash-chain verification against the on-chain record"
+            >
+              {integrity.valid ? `Chain verified · ${integrity.entriesChecked} blocks` : "Chain TAMPERED"}
+            </span>
+          )}
 
           {config && config.contractLive === false && (
             <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-300">

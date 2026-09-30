@@ -3,6 +3,7 @@ import { useState } from "react";
 import { fetchEvents, verifyAudit } from "../lib/api";
 import { StatusPill } from "../components/StatusPill";
 import { copy, shortHash } from "../lib/format";
+import { useIntegrity } from "../hooks/useIntegrity";
 
 export function AuditLogPage() {
   const eventsQ = useQuery({ queryKey: ["events-audit"], queryFn: () => fetchEvents(80), refetchInterval: 6000 });
@@ -14,6 +15,8 @@ export function AuditLogPage() {
   });
 
   const events = eventsQ.data?.events ?? [];
+  const integrity = useIntegrity().data;
+  const blockByIndex = new Map((integrity?.blocks ?? []).map((b) => [b.index, b]));
 
   return (
     <div className="space-y-6">
@@ -26,6 +29,12 @@ export function AuditLogPage() {
           {verify.isPending ? "Verifying…" : "Verify chain"}
         </button>
       </div>
+
+      {integrity && !integrity.valid && !verifyResult && (
+        <div className="panel border-red-500/40 p-4 text-sm text-red-300">
+          Chain broken at Block #{(integrity.brokenAt ?? 0) + 1}. The rows marked below no longer match the on-chain record.
+        </div>
+      )}
 
       {verifyResult && (
         <div
@@ -51,11 +60,15 @@ export function AuditLogPage() {
               <th className="px-4 py-3">Action</th>
               <th className="px-4 py-3">Outcome</th>
               <th className="px-4 py-3">Head</th>
+              <th className="px-4 py-3">Integrity</th>
             </tr>
           </thead>
           <tbody>
-            {events.map((e) => (
-              <tr key={e.index_num} className="border-b border-console-border/50 hover:bg-white/[0.02]">
+            {events.map((e) => {
+              const blk = blockByIndex.get(e.index_num);
+              const bad = !!blk && blk.status !== "ok";
+              return (
+              <tr key={e.index_num} className={`border-b border-console-border/50 ${bad ? "bg-red-950/30" : "hover:bg-white/[0.02]"}`}>
                 <td className="px-4 py-2 font-mono">{e.index_num}</td>
                 <td className="px-4 py-2">{e.grant_id}</td>
                 <td className="px-4 py-2 font-mono text-xs">{e.action_name ?? "—"}</td>
@@ -70,8 +83,20 @@ export function AuditLogPage() {
                     {shortHash(e.head)}
                   </button>
                 </td>
+                <td className="px-4 py-2 text-xs">
+                  {!blk ? (
+                    <span className="text-console-muted">—</span>
+                  ) : blk.status === "ok" ? (
+                    <span className="text-emerald-400">✓ verified</span>
+                  ) : (
+                    <span className="font-semibold text-red-300" title={blk.reasons.join(" ")}>
+                      {blk.status === "tampered" ? `⚠ TAMPERED (${blk.diffs.join(", ")})` : "⛓ broken link"}
+                    </span>
+                  )}
+                </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

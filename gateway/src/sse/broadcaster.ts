@@ -6,7 +6,8 @@ export type SseEvent =
   | { type: "pending"; data: Record<string, unknown> }
   | { type: "provider"; data: Record<string, unknown> }
   | { type: "intent"; data: Record<string, unknown> }
-  | { type: "reset"; data: Record<string, unknown> };
+  | { type: "reset"; data: Record<string, unknown> }
+  | { type: "integrity"; data: Record<string, unknown> };
 
 class SseBroadcaster extends EventEmitter {
   constructor() {

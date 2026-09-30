@@ -79,14 +79,35 @@ export function devAdvanceTime(seconds: number) {
   });
 }
 
-export function devTamperAudit(
-  index: number,
-  field: "amount" | "code" | "action_id" | "action_name" | "head" = "amount",
-  value = "999999999999999999",
-) {
-  return gw<{ tampered: number; field: string }>("/dev/tamper-audit", {
+export type TamperField =
+  | "amount"
+  | "code"
+  | "action_id"
+  | "action_name"
+  | "outcome"
+  | "params_hash"
+  | "block_number"
+  | "grant_id"
+  | "head";
+
+export function devTamperAudit(index: number, fields: Partial<Record<TamperField, string>>) {
+  return gw<{ tampered: number; valid: boolean; brokenAt: number | null }>("/dev/tamper-audit", {
     method: "POST",
-    body: JSON.stringify({ index, field, value }),
+    body: JSON.stringify({ index, fields }),
+  });
+}
+
+export function devDeleteBlock(index: number) {
+  return gw<{ deleted: boolean; valid: boolean }>("/dev/tamper-audit", {
+    method: "POST",
+    body: JSON.stringify({ index, delete: true }),
+  });
+}
+
+export function devRemine(index: number, mode: "one" | "all") {
+  return gw<{ remined: number; valid: boolean }>("/dev/remine", {
+    method: "POST",
+    body: JSON.stringify({ index, mode }),
   });
 }
 
@@ -161,18 +182,38 @@ export interface PendingRow {
   expires_at: number;
 }
 
-export interface VerifyRow {
+export type BlockStatus = "ok" | "tampered" | "broken-link";
+
+export interface VerifyBlock {
+  position: number;
   index: number;
-  grantId: number;
-  actionId?: string;
-  actionName?: string;
-  outcome?: string;
-  amount?: string;
-  paramsHash?: string;
-  code?: number;
+  prevHash: string;
   head: string;
+  recomputedHead: string;
+  hashOk: boolean;
+  anchored: boolean | null;
+  diffs: string[];
+  reasons: string[];
+  status: BlockStatus;
+  grantId: number;
+  actionId: string;
+  actionName: string | null;
+  outcome: string | null;
+  amount: string;
+  paramsHash: string;
+  code: number;
   blockNumber: number;
-  txHash?: string;
+  txHash: string | null;
+  timestamp: number | null;
+  nonce: string | null;
+  onChain: Record<string, string> | null;
+}
+
+export interface Rejection {
+  at: number;
+  grantId: number | null;
+  action: string | null;
+  reason: string;
 }
 
 export interface VerifyResult {
@@ -181,5 +222,18 @@ export interface VerifyResult {
   onChainHead: string;
   computedHead: string;
   entriesChecked: number;
-  rows?: VerifyRow[];
+  onChainCount: number | null;
+  chainAvailable: boolean;
+  lagging: boolean;
+  missing: number[];
+  headMatchesChain: boolean | null;
+  tamperedCount: number;
+  genesis: {
+    head: string;
+    address: string;
+    chainId: number;
+    deployed: { blockNumber: number; timestamp: number } | null;
+  };
+  rejections: Rejection[];
+  blocks: VerifyBlock[];
 }

@@ -11,6 +11,8 @@ import {
   Wrench,
 } from "lucide-react";
 import { Header } from "./Header";
+import { IntegrityBanner } from "./IntegrityBanner";
+import { useIntegrityLive } from "../hooks/useIntegrity";
 import clsx from "clsx";
 
 const links = [
@@ -25,9 +27,11 @@ const links = [
 ];
 
 export function Layout() {
+  useIntegrityLive();
   return (
     <div className="min-h-screen">
       <Header />
+      <IntegrityBanner />
       <div className="mx-auto flex max-w-7xl gap-6 px-4 py-6">
         <nav className="hidden w-52 shrink-0 flex-col gap-1 md:flex">
           <div className="mb-4 flex items-center gap-2 px-2 text-emerald-400">

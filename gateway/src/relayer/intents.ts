@@ -5,6 +5,7 @@ import { actionId, proofsForAction } from "../proof/service.js";
 import { runProvider } from "../providers/mock.js";
 import { sse } from "../sse/broadcaster.js";
 import { syncGrantsFromChain } from "../indexer/index.js";
+import { assertChainIntact } from "../audit/verify.js";
 
 export interface IntentRequest {
   grantId: number;
@@ -36,6 +37,9 @@ function decodeRevert(err: unknown): string {
 }
 
 export async function relayIntent(req: IntentRequest): Promise<IntentResult> {
+  // Never append a new block on top of a chain whose stored history no longer matches itself / the contract.
+  await assertChainIntact({ grantId: req.grantId, action: req.action });
+
   const guard = getGuard();
   const read = getGuardReadOnly();
   const domain = await getDomain();
@@ -189,6 +193,7 @@ export interface DelegationRequest {
 }
 
 export async function relayDelegation(req: DelegationRequest) {
+  await assertChainIntact({ grantId: req.delegation.parentId, action: "delegate" });
   const guard = getGuard();
   const d = {
     parentId: BigInt(req.delegation.parentId),
